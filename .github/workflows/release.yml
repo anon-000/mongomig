@@ -1,0 +1,58 @@
+name: Release
+
+# Publishes to PyPI when a GitHub Release is published.
+# Uses PyPI Trusted Publishing (OIDC): no API tokens are stored in the repo.
+# One-time setup: add a "pending publisher" on pypi.org for this repo,
+# workflow `release.yml`, environment `pypi`.
+
+on:
+  release:
+    types: [published]
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v6
+        with:
+          python-version: "3.12"
+
+      - name: Check release tag matches package version
+        run: |
+          TAG="${GITHUB_REF_NAME#v}"
+          VERSION=$(python -c "exec(open('src/mongomig/_version.py').read()); print(__version__)")
+          if [ "$TAG" != "$VERSION" ]; then
+            echo "::error::Release tag v$TAG does not match _version.py ($VERSION)"
+            exit 1
+          fi
+
+      - name: Build sdist and wheel
+        run: uv build
+
+      - name: Smoke-test the built wheel
+        run: |
+          uv venv /tmp/smoke
+          uv pip install --python /tmp/smoke dist/*.whl
+          /tmp/smoke/bin/mongomig --version
+          cd "$(mktemp -d)" && /tmp/smoke/bin/mongomig init && /tmp/smoke/bin/mongomig history
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: dist
+          path: dist/
+
+  publish:
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: pypi
+      url: https://pypi.org/p/mongomig
+    permissions:
+      id-token: write  # required for Trusted Publishing
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: dist
+          path: dist/
+      - uses: pypa/gh-action-pypi-publish@release/v1

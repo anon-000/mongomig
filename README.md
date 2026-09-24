@@ -128,6 +128,13 @@ make check          # ruff + mypy --strict + pytest
 Integration tests are skipped automatically when MongoDB isn't running. To test against another
 MongoDB version, run `MONGO_VERSION=8.0 make mongo-up`.
 
+### Releasing
+
+1. Bump `src/mongomig/_version.py` and update `CHANGELOG.md`, then merge to `main`.
+2. On GitHub, create a Release with tag `v<version>` (e.g. `v0.1.0`) and publish it.
+3. `.github/workflows/release.yml` checks that the tag matches the version, builds and
+   smoke-tests the wheel, then publishes to PyPI through Trusted Publishing.
+
 ## License
 
 MIT
