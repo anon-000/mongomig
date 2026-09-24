@@ -1,0 +1,33 @@
+# Local MongoDB for development and integration tests.
+#
+#   docker compose up -d --wait        # start (waits until the replica set is ready)
+#   docker compose down -v             # stop and delete data
+#
+# A single-node replica set, because transactions and change streams need one.
+# Connect with: mongodb://localhost:27017/?directConnection=true
+# Test other versions with: MONGO_VERSION=8.0 docker compose up -d --wait
+
+services:
+  mongo:
+    image: mongo:${MONGO_VERSION:-7.0}
+    container_name: mongomig-mongo
+    command: ["--replSet", "rs0", "--bind_ip_all", "--port", "27017"]
+    ports:
+      - "${MONGO_PORT:-27017}:27017"
+    volumes:
+      - mongo-data:/data/db
+    healthcheck:
+      # Initiates the replica set on first run, then reports healthy once it has a primary.
+      test:
+        - CMD-SHELL
+        - >
+          mongosh --quiet --eval "try { rs.status().ok } catch (e) {
+          rs.initiate({_id: 'rs0', members: [{_id: 0, host: 'localhost:27017'}]}).ok }"
+          | grep -q 1 && mongosh --quiet --eval "db.hello().isWritablePrimary" | grep -q true
+      interval: 2s
+      timeout: 10s
+      retries: 30
+      start_period: 5s
+
+volumes:
+  mongo-data:
