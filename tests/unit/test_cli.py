@@ -157,3 +157,57 @@ def test_cli_startup_time() -> None:
     if elapsed > 0.5:
         warnings.warn(f"mongomig --help took {elapsed:.2f}s (target < 0.5s)", stacklevel=1)
     assert elapsed < 2.0
+
+
+def test_merge_joins_heads(project: Path) -> None:
+    r1 = as_json("revision", "-m", "initial")["revision"]
+    a = as_json("revision", "-m", "a")["revision"]
+    b = as_json("revision", "-m", "b", "--head", r1)["revision"]
+
+    merged = as_json("merge", "-m", "merge a and b")
+    assert set(merged["down_revision"]) == {a, b}
+    assert [h["revision"] for h in as_json("heads")["heads"]] == [merged["revision"]]
+    # and new revisions build on the merge again
+    assert as_json("revision", "-m", "after")["down_revision"] == merged["revision"]
+
+    history = as_json("history")["revisions"]
+    assert next(h for h in history if h["revision"] == merged["revision"])["is_merge"]
+
+
+def test_merge_needs_two_heads(project: Path) -> None:
+    as_json("revision", "-m", "initial")
+    code, output = invoke("merge")
+    assert code == 1
+    assert "Nothing to merge" in output
+
+
+def test_merge_rejects_ancestors(project: Path) -> None:
+    r1 = as_json("revision", "-m", "initial")["revision"]
+    r2 = as_json("revision", "-m", "next")["revision"]
+    code, output = invoke("merge", r1, r2)
+    assert code == 1
+    assert "ancestor" in output
+
+
+def test_new_revision_template_documents_ctx(project: Path) -> None:
+    path = as_json("revision", "-m", "x")["path"]
+    source = (project / path).read_text()
+    assert 'ctx.ops.backfill("users", {"status": {"$exists": False}}' in source
+    compile(source, path, "exec")
+
+
+def test_help_lists_all_commands() -> None:
+    code, output = invoke("--help")
+    assert code == 0
+    for cmd in (
+        "init",
+        "revision",
+        "merge",
+        "heads",
+        "history",
+        "current",
+        "upgrade",
+        "downgrade",
+        "stamp",
+    ):
+        assert cmd in output

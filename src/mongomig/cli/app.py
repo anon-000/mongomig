@@ -126,9 +126,106 @@ def history(ctx: typer.Context, json_: JsonOpt = False) -> None:
 
 
 @app.command()
-def current(ctx: typer.Context, json_: JsonOpt = False) -> None:
+def merge(
+    ctx: typer.Context,
+    revisions: Annotated[
+        list[str] | None,
+        typer.Argument(help="Revisions to merge (default: all current heads)."),
+    ] = None,
+    message: Annotated[str, typer.Option("--message", "-m", help="Short description.")] = (
+        "merge heads"
+    ),
+    rev_id: Annotated[
+        str | None, typer.Option("--rev-id", help="Use this revision id instead of a random one.")
+    ] = None,
+    json_: JsonOpt = False,
+) -> None:
+    """Create a merge revision that joins several heads into one."""
+    _run(ctx, "merge", json_=json_, revisions=revisions or [], message=message, rev_id=rev_id)
+
+
+LockTimeoutOpt = Annotated[
+    float,
+    typer.Option(
+        "--lock-timeout",
+        min=0,
+        help="Seconds to wait if another run holds the migration lock (default: fail fast).",
+    ),
+]
+StepsOpt = Annotated[
+    int | None, typer.Option("--steps", "-n", min=1, help="Only this many revisions.")
+]
+
+
+@app.command()
+def current(
+    ctx: typer.Context,
+    check: Annotated[
+        bool,
+        typer.Option("--check", help="Exit with code 1 unless the database is fully up to date."),
+    ] = False,
+    json_: JsonOpt = False,
+) -> None:
     """Show which revisions are applied to the database, and what is pending."""
-    _run(ctx, "current", json_=json_)
+    _run(ctx, "current", json_=json_, check=check)
+
+
+@app.command()
+def upgrade(
+    ctx: typer.Context,
+    target: Annotated[
+        str, typer.Argument(help="'head' (default), 'heads', or a revision id/prefix.")
+    ] = "head",
+    steps: StepsOpt = None,
+    lock_timeout: LockTimeoutOpt = 0,
+    json_: JsonOpt = False,
+) -> None:
+    """Apply pending migrations."""
+    _run(ctx, "upgrade", json_=json_, target=target, steps=steps, lock_timeout=lock_timeout)
+
+
+@app.command()
+def downgrade(
+    ctx: typer.Context,
+    target: Annotated[
+        str | None,
+        typer.Argument(
+            help="Revision to go back to (it stays applied), or 'base'. Default: one step."
+        ),
+    ] = None,
+    steps: StepsOpt = None,
+    yes: Annotated[bool, typer.Option("--yes", "-y", help="Don't ask for confirmation.")] = False,
+    force: Annotated[
+        bool,
+        typer.Option("--force", help="Allow passing through irreversible migrations."),
+    ] = False,
+    lock_timeout: LockTimeoutOpt = 0,
+    json_: JsonOpt = False,
+) -> None:
+    """Revert applied migrations (asks for confirmation)."""
+    _run(
+        ctx,
+        "downgrade",
+        json_=json_,
+        target=target,
+        steps=steps,
+        yes=yes,
+        force=force,
+        lock_timeout=lock_timeout,
+    )
+
+
+@app.command()
+def stamp(
+    ctx: typer.Context,
+    revisions: Annotated[
+        list[str], typer.Argument(help="Revision(s) to mark as current, 'heads', or 'base'.")
+    ],
+    lock_timeout: LockTimeoutOpt = 0,
+    json_: JsonOpt = False,
+) -> None:
+    """Mark revisions as applied WITHOUT running them (baselines, checksum repair)."""
+    _run(ctx, "stamp", json_=json_, revisions=revisions, lock_timeout=lock_timeout)
 
 
 def main() -> None:

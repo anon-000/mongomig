@@ -15,6 +15,10 @@ mongomig_format = 1
 
 
 def upgrade(ctx):
+    # Examples:
+    #   ctx.ops.create_index("users", "email", unique=True)
+    #   ctx.ops.backfill("users", {"status": {"$$exists": False}}, {"$$set": {"status": "active"}})
+    #   users = ctx.collection("users")  # plain PyMongo collection for custom logic
     pass
 
 

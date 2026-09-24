@@ -72,6 +72,7 @@ src = ["src", "tests"]
 select = ["E", "F", "W", "I", "B", "UP", "SIM", "RUF", "PL", "PT"]
 ignore = [
     "PLR0913", # CLI commands naturally take many options
+    "PLR0917", # ...as positional parameters (Typer signatures)
     "PLR2004", # magic values are fine in tests and small helpers
     "PLC0415", # imports inside functions are deliberate (lazy loading for CLI startup)
 ]

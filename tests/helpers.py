@@ -34,3 +34,34 @@ def write_file(path: Path, content: str) -> Path:
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(content, encoding="utf-8")
     return path
+
+
+def write_migration(
+    versions_dir: Path,
+    rev_id: str,
+    down: str | tuple[str, ...] | None = None,
+    *,
+    upgrade: str = "pass",
+    downgrade: str | None = "pass",
+    reversible: bool = True,
+    message: str | None = None,
+    minute: int = 0,
+) -> Path:
+    """Write a revision file with real upgrade/downgrade bodies (each a Python code block)."""
+
+    def body(code: str) -> str:
+        return "\n".join("    " + line for line in code.strip().splitlines())
+
+    stamp = (_BASE_TIME + timedelta(minutes=minute)).strftime("%Y%m%d_%H%M")
+    lines = [
+        f'"""{message or "rev " + rev_id}"""',
+        f"revision = {rev_id!r}",
+        f"down_revision = {down!r}",
+        f"reversible = {reversible}",
+        "",
+        "def upgrade(ctx):",
+        body(upgrade),
+    ]
+    if downgrade is not None:
+        lines += ["", "def downgrade(ctx):", body(downgrade)]
+    return write_file(versions_dir / f"{stamp}_{rev_id}.py", "\n".join(lines) + "\n")
