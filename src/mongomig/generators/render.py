@@ -487,15 +487,23 @@ def _call(func: str, *args: Any, **kwargs: Any) -> str:
     return "\n".join(lines)
 
 
-def lit(value: Any, indent: int = 0) -> str:
-    """Python literal with double quotes; long containers are split over several lines."""
+def lit(value: Any, indent: int = 0, used: int = 0) -> str:
+    """Python literal with double quotes; long containers are split over several lines.
+
+    ``indent`` is the nesting depth in spaces, ``used`` the width already taken on the line
+    (e.g. by a dict key); 8 more columns are reserved for the function body and call wrapping.
+    """
     flat = _lit_flat(value)
-    if len(flat) + indent <= LINE_LIMIT - 8 or not isinstance(value, dict | list | tuple):
+    fits = len(flat) + indent + used <= LINE_LIMIT - 8
+    if fits or not isinstance(value, dict | list | tuple):
         return flat
     pad = "    " * (indent // 4 + 1)
     close = "    " * (indent // 4)
     if isinstance(value, dict):
-        items = [f"{pad}{_lit_flat(k)}: {lit(v, indent + 4)}," for k, v in value.items()]
+        items = [
+            f"{pad}{_lit_flat(k)}: {lit(v, indent + 4, len(_lit_flat(k)) + 2)},"
+            for k, v in value.items()
+        ]
         return "{\n" + "\n".join(items) + f"\n{close}}}"
     items = [f"{pad}{lit(v, indent + 4)}," for v in value]
     open_, end = ("[", "]") if isinstance(value, list) else ("(", ")")

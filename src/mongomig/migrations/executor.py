@@ -352,6 +352,16 @@ class Executor:
         assessment = assess(
             recorder.ops, reversible=script.reversible, unavailable=unavailable, error=error
         )
+        from mongomig.safety.impact import Risk, is_sharded
+
+        data_ops = {op.collection for op in recorder.ops if op.estimated_docs}
+        for name in sorted(data_ops):
+            if is_sharded(self.db, name):
+                assessment.raise_to(
+                    Risk.MEDIUM,
+                    f"{name} is sharded: broad updates fan out to every shard; shard-key "
+                    "changes must be written by hand",
+                )
         return MigrationAnalysis(
             script=script,
             direction=direction,

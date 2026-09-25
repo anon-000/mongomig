@@ -364,5 +364,31 @@ def backups(
     _run(ctx, "backups", json_=json_, drop=drop or [], yes=yes)
 
 
+@app.command()
+def validate(
+    ctx: typer.Context,
+    database: Annotated[
+        bool,
+        typer.Option("--database", help="Also check the database: checksums, failed runs."),
+    ] = False,
+    imports: Annotated[
+        bool,
+        typer.Option("--import/--no-import", help="Import every revision file (default: yes)."),
+    ] = True,
+    strict: Annotated[
+        bool, typer.Option("--strict", help="Treat model type-mapping warnings as failures.")
+    ] = False,
+    json_: JsonOpt = False,
+) -> None:
+    """Check config, revisions and models for CI (offline unless --database)."""
+    _run(ctx, "validate", json_=json_, database=database, imports=imports, strict=strict)
+
+
+@app.command()
+def doctor(ctx: typer.Context, json_: JsonOpt = False) -> None:
+    """Diagnose the environment: versions, connection, server, permissions, lock, backups."""
+    _run(ctx, "doctor", json_=json_)
+
+
 def main() -> None:
     app()

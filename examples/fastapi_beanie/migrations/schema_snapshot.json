@@ -1,0 +1,165 @@
+{
+  "collections": {
+    "products": {
+      "fields": {
+        "_id": {
+          "bson_types": [
+            "objectId"
+          ],
+          "nullable": false,
+          "required": true
+        },
+        "created_at": {
+          "bson_types": [
+            "date"
+          ],
+          "default": {
+            "dynamic": true
+          },
+          "nullable": false,
+          "required": true
+        },
+        "price": {
+          "bson_types": [
+            "decimal"
+          ],
+          "nullable": false,
+          "required": true
+        },
+        "sku": {
+          "bson_types": [
+            "string"
+          ],
+          "nullable": false,
+          "required": true
+        },
+        "tags": {
+          "bson_types": [
+            "array"
+          ],
+          "default": {
+            "value": []
+          },
+          "items": {
+            "bson_types": [
+              "string"
+            ],
+            "nullable": false,
+            "required": false
+          },
+          "nullable": false,
+          "required": true
+        },
+        "title": {
+          "bson_types": [
+            "string"
+          ],
+          "nullable": false,
+          "required": true
+        }
+      },
+      "indexes": [
+        {
+          "keys": [
+            [
+              "price",
+              1
+            ],
+            [
+              "created_at",
+              -1
+            ]
+          ],
+          "name": "price_recent"
+        },
+        {
+          "keys": [
+            [
+              "sku",
+              1
+            ]
+          ],
+          "name": "sku_1",
+          "unique": true
+        },
+        {
+          "keys": [
+            [
+              "title",
+              1
+            ]
+          ],
+          "name": "title_1"
+        },
+        {
+          "keys": [
+            [
+              "title",
+              "text"
+            ]
+          ],
+          "name": "title_text"
+        }
+      ],
+      "model": "catalog.models.Product",
+      "validator": null
+    },
+    "reviews": {
+      "fields": {
+        "_id": {
+          "bson_types": [
+            "objectId"
+          ],
+          "nullable": false,
+          "required": true
+        },
+        "body": {
+          "bson_types": [
+            "string"
+          ],
+          "default": {
+            "value": null
+          },
+          "nullable": true,
+          "required": true
+        },
+        "product_sku": {
+          "bson_types": [
+            "string"
+          ],
+          "nullable": false,
+          "required": true
+        },
+        "rating": {
+          "bson_types": [
+            "int",
+            "long"
+          ],
+          "nullable": false,
+          "required": true
+        }
+      },
+      "indexes": [
+        {
+          "keys": [
+            [
+              "product_sku",
+              1
+            ]
+          ],
+          "name": "product_sku_1"
+        }
+      ],
+      "model": "catalog.models.Review",
+      "validator": null
+    }
+  },
+  "mongomig_format": 1,
+  "storage": {
+    "by_alias": true,
+    "exclude_none": false,
+    "exclude_unset": false,
+    "mode": "python",
+    "type_overrides": {}
+  }
+}

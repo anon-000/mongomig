@@ -80,6 +80,16 @@ def assess(
     return a
 
 
+def is_sharded(db: Any, name: str) -> bool:
+    """True when ``name`` is a sharded collection (false on replica sets / standalone)."""
+    from pymongo.errors import PyMongoError
+
+    try:
+        return bool(db.command("collStats", name).get("sharded", False))
+    except PyMongoError:
+        return False
+
+
 def uses_collection_scan(
     coll: Collection[dict[str, Any]], filter: Mapping[str, Any] | None
 ) -> bool | None:
