@@ -22,13 +22,12 @@ from functools import partial
 from typing import TYPE_CHECKING, Any, TypeVar
 
 from mongomig.migrations.context import MigrationContext, OperationState
+from mongomig.schema.indexes import IndexKeys, normalize_index_keys
 
 if TYPE_CHECKING:
     from pymongo.collection import Collection
 
 T = TypeVar("T")
-
-IndexKeys = str | Sequence[str] | Sequence[tuple[str, Any]] | Mapping[str, Any]
 
 # MongoDB error codes we treat specially.
 _NAMESPACE_NOT_FOUND = 26
@@ -40,25 +39,6 @@ class BatchResult:
     matched: int
     modified: int
     batches: int
-
-
-def normalize_index_keys(keys: IndexKeys) -> list[tuple[str, Any]]:
-    """``"email"`` / ``["a", "b"]`` / ``[("a", 1), ("b", -1)]`` / ``{"a": 1}`` → key list."""
-    if isinstance(keys, str):
-        return [(keys, 1)]
-    if isinstance(keys, Mapping):
-        return list(keys.items())
-    normalized: list[tuple[str, Any]] = []
-    for item in keys:
-        if isinstance(item, str):
-            normalized.append((item, 1))
-        elif isinstance(item, tuple | list) and len(item) == 2 and isinstance(item[0], str):
-            normalized.append((item[0], item[1]))
-        else:
-            raise TypeError(f"Invalid index key specification: {item!r}")
-    if not normalized:
-        raise ValueError("An index needs at least one key.")
-    return normalized
 
 
 class Operations:

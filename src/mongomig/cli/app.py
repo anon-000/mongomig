@@ -228,5 +228,42 @@ def stamp(
     _run(ctx, "stamp", json_=json_, revisions=revisions, lock_timeout=lock_timeout)
 
 
+@app.command()
+def inspect(
+    ctx: typer.Context,
+    collections: Annotated[
+        list[str] | None, typer.Argument(help="Collections to inspect (default: all).")
+    ] = None,
+    sample_size: Annotated[
+        int | None,
+        typer.Option("--sample-size", min=1, help="Random sample size (default from config)."),
+    ] = None,
+    sample_percent: Annotated[
+        float | None,
+        typer.Option("--sample-percent", min=0.001, max=100, help="Sample this % of documents."),
+    ] = None,
+    full_scan: Annotated[
+        bool, typer.Option("--full-scan", help="Read every document (slow on big collections).")
+    ] = False,
+    json_: JsonOpt = False,
+) -> None:
+    """Show the schema actually stored in MongoDB (fields, types, presence, indexes)."""
+    _run(
+        ctx,
+        "inspect",
+        json_=json_,
+        collections=collections or [],
+        sample_size=sample_size,
+        sample_percent=sample_percent,
+        full_scan=full_scan,
+    )
+
+
+@app.command()
+def models(ctx: typer.Context, json_: JsonOpt = False) -> None:
+    """Show the schema your registered models declare (as MongoMig maps them to BSON)."""
+    _run(ctx, "models", json_=json_)
+
+
 def main() -> None:
     app()

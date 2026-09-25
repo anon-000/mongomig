@@ -7,6 +7,17 @@ All notable changes to this project are documented here. The format follows
 ## [Unreleased]
 
 ### Added
+- Schema engine (Milestone 3): `MongoMetadata` registry, `@collection` decorator,
+  `Index`, explicit `register()`, and `register_beanie()` (reads Beanie `Settings`,
+  `Indexed(...)`, `keep_nulls`, `use_revision`).
+- Pydantic → BSON type mapping with storage profiles (`python`, `json`, `beanie`, plus
+  `by_alias`/`exclude_none`/`exclude_unset`/`type_overrides`). Warns about types PyMongo
+  cannot store.
+- Generated `$jsonSchema` validators (`validator="auto"`).
+- Schema inference from documents (sample / percentage / full scan) with per-field presence
+  and type distribution, map detection, indexes and validator.
+- Commands: `mongomig models`, `mongomig inspect`.
+- Snapshot model (`schema_snapshot.json`) with a deterministic format and content hash.
 - Migration engine (Milestone 2): `upgrade` (to `head`, `heads`, a revision, or `--steps N`),
   `downgrade` (one step, `--steps N`, to a revision, or `base`; asks for confirmation),
   `merge`, `stamp`, and `current --check`.

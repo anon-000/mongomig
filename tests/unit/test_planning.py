@@ -7,8 +7,8 @@ import pytest
 from mongomig.errors import MultipleHeadsError, RevisionNotFoundError, ValidationError
 from mongomig.migrations.executor import plan_downgrade, plan_upgrade, stamp_set
 from mongomig.migrations.graph import RevisionGraph
-from mongomig.migrations.ops import normalize_index_keys
 from mongomig.migrations.script import load_scripts
+from mongomig.schema.indexes import normalize_index_keys
 from tests.helpers import make_revision
 
 

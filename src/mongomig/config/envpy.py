@@ -7,10 +7,13 @@ import sys
 import traceback
 from pathlib import Path
 from types import ModuleType
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 from mongomig.config.models import LoadedConfig
 from mongomig.errors import ConfigError
+
+if TYPE_CHECKING:
+    from mongomig.metadata.registry import MongoMetadata
 
 ENV_MODULE_NAME = "_mongomig_env"
 
@@ -46,6 +49,19 @@ def load_env_module(path: Path, project_root: Path) -> ModuleType:
             details={"path": str(path), "line": f"{last.filename}:{last.lineno}"},
         ) from exc
     return module
+
+
+def load_metadata(config: LoadedConfig) -> MongoMetadata | None:
+    """``target_metadata`` from env.py, checked to be a ``MongoMetadata`` (or ``None``)."""
+    from mongomig.metadata.registry import MongoMetadata
+
+    value = load_target_metadata(config)
+    if value is None or isinstance(value, MongoMetadata):
+        return value
+    raise ConfigError(
+        f"target_metadata in env.py must be a MongoMetadata or None, got {type(value).__name__}.",
+        suggestion="Use `target_metadata = MongoMetadata.default()` (see env.py comments).",
+    )
 
 
 def load_target_metadata(config: LoadedConfig) -> Any:
