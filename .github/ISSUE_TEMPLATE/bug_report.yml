@@ -1,0 +1,36 @@
+name: Bug report
+description: Something doesn't work as documented
+labels: [bug]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for reporting! Please **remove credentials** from anything you paste
+        (MongoMig itself never prints passwords).
+  - type: textarea
+    id: what
+    attributes:
+      label: What happened?
+      description: What you did, what you expected, what happened instead.
+    validations:
+      required: true
+  - type: textarea
+    id: output
+    attributes:
+      label: Command and output
+      description: The command you ran and its full output (re-run with `--verbose`).
+      render: console
+  - type: textarea
+    id: repro
+    attributes:
+      label: Minimal reproduction
+      description: Model(s), migration file and/or data that trigger the problem.
+      render: python
+  - type: textarea
+    id: doctor
+    attributes:
+      label: Output of `mongomig doctor`
+      description: Versions of MongoMig, Python, PyMongo, Pydantic, Beanie and MongoDB.
+      render: text
+    validations:
+      required: true

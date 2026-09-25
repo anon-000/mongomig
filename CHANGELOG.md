@@ -6,6 +6,17 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+## [0.1.1] — 2026-09-25
+
+### Fixed
+- README links to the documentation and examples were relative, so they were broken on the
+  PyPI project page; they now point to GitHub.
+
+### Added
+- README badges; PyPI sidebar links (Documentation, Changelog, Source).
+- `docs/comparison.md`: MongoMig for Alembic users and for teams using hand-written scripts.
+- `CONTRIBUTING.md`, `SECURITY.md`, issue and pull request templates.
+
 ## [0.1.0] — 2026-09-25
 
 First stable-track release: the MVP defined in the PRD is complete.
