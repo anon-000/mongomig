@@ -4,8 +4,8 @@
 
 Built for Python services (FastAPI, Flask, workers) on PyMongo, Motor or Beanie.
 
-> **Status: pre-alpha.** Writing and running migrations works (M1 + M2). Schema diff and
-> autogenerate are next. See the roadmap below.
+> **Status: pre-alpha.** Writing and running migrations works (M1 + M2), and MongoMig can
+> read your models and inspect your data (M3). Schema diff and autogenerate are next.
 
 ```console
 $ mongomig revision -m "add user status"
@@ -110,6 +110,99 @@ For anything else, `ctx.collection("users")` is a plain PyMongo collection, and
 Declare `reversible = False` (and optionally omit `downgrade`) when a migration can't be
 undone. `downgrade` then refuses to pass through it unless you add `--force`.
 
+### Registering your models
+
+MongoMig learns what your collections *should* look like from your models, in the same way
+Alembic learns from SQLAlchemy's `MetaData`. You can register plain Pydantic models with a
+decorator:
+
+```python
+# app/models.py
+from pydantic import BaseModel
+from mongomig import collection, Index
+
+
+@collection("users", indexes=[Index("email", unique=True)], validator="auto")
+class User(BaseModel):
+    name: str
+    email: str
+    age: int | None = None
+```
+
+Or register them explicitly in `migrations/env.py`, which keeps MongoMig out of your model
+modules:
+
+```python
+from mongomig import MongoMetadata, Index
+from app.models import User
+
+target_metadata = MongoMetadata.default(storage="python")
+target_metadata.register(User, "users", indexes=[Index("email", unique=True)])
+```
+
+**Beanie** documents need no extra declarations, because the collection name, `Indexed(...)`
+fields and `Settings.indexes` are read from the class:
+
+```python
+target_metadata.register_beanie(User, Order)
+```
+
+`validator="auto"` makes MongoMig manage a `$jsonSchema` validator generated from the model
+(with `validationLevel: moderate` by default). `None` (the default) leaves validators alone.
+
+#### Storage profile
+
+The BSON type that ends up in MongoDB depends on how your app writes documents:
+
+| `storage=` | Your code | `datetime` | `UUID` | `Decimal` | `ObjectId` |
+|---|---|---|---|---|---|
+| `"python"` | `coll.insert_one(m.model_dump())` | date | binData | decimal | objectId |
+| `"json"` | `m.model_dump(mode="json")` / FastAPI `jsonable_encoder` | **string** | string | string | string |
+| `"beanie"` | Beanie (automatic for `register_beanie`) | date | binData | decimal | objectId |
+
+Also available: `by_alias`, `exclude_none`, `exclude_unset` (match your `model_dump` options)
+and `type_overrides={MyType: "string"}`.
+
+`mongomig models` shows the resulting schema. It also **warns about types PyMongo cannot store**
+with your profile, such as `date`, `Decimal`, `Enum` members without `use_enum_values`, or
+`UUID` without a `uuidRepresentation`:
+
+```console
+$ mongomig models
+users  app.models.User
+  _id         objectId
+  name        string
+  email       string
+  age         int | null     default=None
+  indexes: email_1 (email ↑, unique)
+```
+
+### Inspecting your data
+
+```console
+$ mongomig inspect users
+Collection: users
+Documents: 10,000 random sample of ~4,982,133  (0.41s)
+
+Fields (nested presence is relative to the parent object):
+  field         presence   types
+  _id            100.00%   objectId
+  name           100.00%   string
+  age             63.20%   int 97.2% · string 2.8%
+  profile         41.10%   object
+    verified     100.00%   bool
+
+Indexes:
+  _id_ (_id ↑)
+  users_email_unique (email ↑, unique)
+
+Validator: none
+```
+
+Sampling options are `--sample-size N` (the default comes from config), `--sample-percent P`
+and `--full-scan`. Sampled results always say so, because documents outside the sample may
+differ.
+
 ### Revisions, branches, merges
 
 Revision order comes from `down_revision`, not from the file name. Revision ids are random,
@@ -133,6 +226,8 @@ handles commit hashes.
 | `upgrade [TARGET] [--steps N]` | yes | Apply pending revisions. `TARGET`: `head` (default), `heads`, or a revision |
 | `downgrade [TARGET] [--steps N] [--yes] [--force]` | yes | Revert one step (default), back to `TARGET`, or `base` |
 | `stamp REV...` | yes | Mark revisions as applied **without running them** (baselines, checksum repair) |
+| `models` | no | The schema your registered models declare, plus storage warnings |
+| `inspect [COLL...] [--sample-size N \| --sample-percent P \| --full-scan]` | yes | The schema actually stored: fields, types, presence, indexes, validator |
 
 Global options: `--config PATH`, `--env NAME`, `--json`, `--verbose`, `--version`.
 
@@ -177,7 +272,7 @@ available synchronously: `mongomig.upgrade()`, `mongomig.downgrade()`, `mongomig
 
 - [x] **M1 Foundation**: config, CLI, revision files, revision graph, tracking
 - [x] **M2 Migration engine**: `upgrade`, `downgrade`, locking, `merge`, checksums, FastAPI lifespan helper
-- [ ] **M3 Schema engine**: `@collection` models, Beanie support, `inspect`, snapshots
+- [x] **M3 Schema engine**: `@collection` models, Beanie support, `inspect`, snapshots
 - [ ] **M4 Autogenerate**: `diff`, `revision --autogenerate`, index/validator diff
 - [ ] **M5 Production safety**: `--dry-run`, `plan`, impact analysis, backups for destructive ops
 - [ ] **M6 Release**: `validate`, `doctor`, docs, PyPI
