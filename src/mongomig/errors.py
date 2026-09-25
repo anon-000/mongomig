@@ -77,6 +77,18 @@ class DatabaseError(ExecutionError):
     """Connecting to or talking to MongoDB failed."""
 
 
+class MigrationExecutionError(ExecutionError):
+    """A migration's upgrade()/downgrade() raised."""
+
+
+class IrreversibleMigrationError(ExecutionError):
+    """A downgrade would pass through a migration declared ``reversible = False``."""
+
+
+class ConfirmationRequiredError(ValidationError):
+    """A dangerous command needs interactive confirmation or ``--yes``."""
+
+
 # --- exit code 3: configuration ------------------------------------------------------------
 
 

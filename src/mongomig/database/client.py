@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from collections.abc import Iterator
+from contextlib import contextmanager
 from typing import TYPE_CHECKING, Any
 
 from mongomig.config.models import LoadedConfig
@@ -80,3 +82,14 @@ def ping(client: MongoClient[dict[str, Any]], config: LoadedConfig) -> None:
             suggestion="Is MongoDB running and reachable? For local dev: `docker compose up -d`.",
             details={"driver_error": redact_text(str(exc))[:500]},
         ) from None
+
+
+@contextmanager
+def open_database(config: LoadedConfig) -> Iterator[Database[dict[str, Any]]]:
+    """Connect, verify connectivity, yield the configured database, always close."""
+    client = create_client(config)
+    try:
+        ping(client, config)
+        yield get_database(client, config)
+    finally:
+        client.close()

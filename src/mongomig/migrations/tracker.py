@@ -5,8 +5,11 @@ from __future__ import annotations
 import contextlib
 import os
 import socket
+import subprocess
+from collections.abc import Iterable
 from dataclasses import dataclass
 from datetime import UTC, datetime
+from pathlib import Path
 from typing import TYPE_CHECKING, Any, Literal
 
 from mongomig._version import __version__
@@ -17,6 +20,7 @@ if TYPE_CHECKING:
     from pymongo.collection import Collection
     from pymongo.database import Database
 
+# "running" left behind means the process died mid-migration (the lock prevents a live one).
 Status = Literal["applied", "failed", "running"]
 
 
@@ -29,6 +33,7 @@ class AppliedRecord:
     checksum: str | None
     applied_at: datetime | None
     execution_time_ms: int | None
+    error: str | None = None
 
     @classmethod
     def from_doc(cls, doc: dict[str, Any]) -> AppliedRecord:
@@ -47,6 +52,7 @@ class AppliedRecord:
             checksum=doc.get("checksum"),
             applied_at=doc.get("applied_at"),
             execution_time_ms=doc.get("execution_time_ms"),
+            error=doc.get("error"),
         )
 
 
@@ -54,10 +60,42 @@ class AppliedRecord:
 class CurrentState:
     """Where the database is relative to the revision files."""
 
+    applied: frozenset[str]
     applied_heads: list[str]
     pending: list[str]
     unknown: list[str]  # applied in the DB but no revision file (DB ahead of this code)
-    failed: list[str]
+    failed: list[str]  # failed or interrupted ("running" with no live runner)
+    modified: list[str]  # applied, but the file's checksum changed since
+
+
+def run_metadata(environment: str | None, project_root: Path | None) -> dict[str, Any]:
+    """Who/where/what ran a migration. Stored with each tracking record."""
+    return {
+        "environment": environment,
+        "hostname": socket.gethostname(),
+        "user": os.environ.get("USER") or os.environ.get("USERNAME"),
+        "git_commit": _git_commit(project_root),
+    }
+
+
+def _git_commit(project_root: Path | None) -> str | None:
+    for var in ("MONGOMIG_GIT_COMMIT", "GITHUB_SHA", "CI_COMMIT_SHA", "GIT_COMMIT"):
+        if os.environ.get(var):
+            return os.environ[var]
+    if project_root is None:
+        return None
+    with contextlib.suppress(OSError, subprocess.SubprocessError):
+        result = subprocess.run(
+            ["git", "rev-parse", "HEAD"],
+            cwd=project_root,
+            capture_output=True,
+            text=True,
+            timeout=2,
+            check=False,
+        )
+        if result.returncode == 0:
+            return result.stdout.strip() or None
+    return None
 
 
 class MigrationTracker:
@@ -92,29 +130,44 @@ class MigrationTracker:
     def applied_ids(self) -> set[str]:
         return {r.revision for r in self.records() if r.status == "applied"}
 
-    def record_applied(
-        self, script: Script, *, execution_time_ms: int, environment: str | None = None
-    ) -> None:
-        self.collection.replace_one(
-            {"_id": script.revision},
-            self._doc(script, "applied", execution_time_ms, environment),
-            upsert=True,
-        )
+    def record_running(self, script: Script, *, meta: dict[str, Any] | None = None) -> None:
+        self._write(self._doc(script, "running", None, meta))
 
-    def record_failed(self, script: Script, *, error: str, environment: str | None = None) -> None:
-        doc = self._doc(script, "failed", None, environment)
+    def record_applied(
+        self, script: Script, *, execution_time_ms: int | None, meta: dict[str, Any] | None = None
+    ) -> None:
+        self._write(self._doc(script, "applied", execution_time_ms, meta))
+
+    def record_failed(
+        self, script: Script, *, error: str, meta: dict[str, Any] | None = None
+    ) -> None:
+        doc = self._doc(script, "failed", None, meta)
         doc["error"] = error
-        self.collection.replace_one({"_id": script.revision}, doc, upsert=True)
+        self._write(doc)
 
     def remove(self, revision: str) -> None:
         self.collection.delete_one({"_id": revision})
+
+    def stamp(self, scripts: Iterable[Script], *, meta: dict[str, Any] | None = None) -> None:
+        """Make the applied set exactly ``scripts`` without running anything."""
+        docs = []
+        for script in scripts:
+            doc = self._doc(script, "applied", None, meta)
+            doc["stamped"] = True
+            docs.append(doc)
+        self.collection.delete_many({})
+        if docs:
+            self.collection.insert_many(docs)
+
+    def _write(self, doc: dict[str, Any]) -> None:
+        self.collection.replace_one({"_id": doc["_id"]}, doc, upsert=True)
 
     def _doc(
         self,
         script: Script,
         status: Status,
         execution_time_ms: int | None,
-        environment: str | None,
+        meta: dict[str, Any] | None,
     ) -> dict[str, Any]:
         downs = script.down_revisions
         return {
@@ -127,23 +180,31 @@ class MigrationTracker:
             "applied_at": datetime.now(UTC),
             "execution_time_ms": execution_time_ms,
             "mongomig_version": __version__,
-            "meta": {
-                "environment": environment,
-                "hostname": socket.gethostname(),
-                "user": os.environ.get("USER") or os.environ.get("USERNAME"),
-            },
+            "meta": meta or {},
         }
 
 
 def compute_state(graph: RevisionGraph, records: list[AppliedRecord]) -> CurrentState:
-    applied = {r.revision for r in records if r.status == "applied"}
-    failed = [r.revision for r in records if r.status == "failed"]
+    applied = frozenset(r.revision for r in records if r.status == "applied")
+    failed = [r.revision for r in records if r.status in ("failed", "running")]
     known_applied = {rev for rev in applied if rev in graph}
-    heads = [
-        rev
-        for rev in graph.topological_order()
-        if rev in known_applied and not (graph.children[rev] & known_applied)
-    ]
-    pending = [rev for rev in graph.topological_order() if rev not in applied]
+    order = graph.topological_order()
+    heads = [rev for rev in order if rev in known_applied and not graph.children[rev] & applied]
+    pending = [rev for rev in order if rev not in applied]
     unknown = sorted(applied - set(graph.scripts))
-    return CurrentState(applied_heads=heads, pending=pending, unknown=unknown, failed=failed)
+    modified = [
+        r.revision
+        for r in records
+        if r.status == "applied"
+        and r.revision in graph
+        and r.checksum is not None
+        and r.checksum != graph.scripts[r.revision].checksum
+    ]
+    return CurrentState(
+        applied=applied,
+        applied_heads=heads,
+        pending=pending,
+        unknown=unknown,
+        failed=failed,
+        modified=modified,
+    )

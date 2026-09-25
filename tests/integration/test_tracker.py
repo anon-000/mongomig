@@ -34,7 +34,7 @@ def test_record_lifecycle(mongo_db: Database[dict[str, Any]], versions_dir: Path
     s1 = make_revision(versions_dir, "rev000000001", minute=0)
     s2 = make_revision(versions_dir, "rev000000002", "rev000000001", minute=1)
 
-    tracker.record_applied(s1, execution_time_ms=12, environment="test")
+    tracker.record_applied(s1, execution_time_ms=12, meta={"environment": "test"})
     tracker.record_failed(s2, error="boom")
     records = {r.revision: r for r in tracker.records()}
     assert records["rev000000001"].status == "applied"
