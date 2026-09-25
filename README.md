@@ -61,7 +61,8 @@ mongomig current                                # what's applied vs pending
 3. mongomig revision --autogenerate -m "..."       generate the migration + update the snapshot
 4. Review the file (search for TODO(review)), commit both files
 5. CI: mongomig diff --check                       fails if a model change has no migration
-6. Deploy: mongomig upgrade
+6. Deploy: mongomig plan                           impact + risk against the real data
+           mongomig upgrade
 ```
 
 `diff` compares your models with `migrations/schema_snapshot.json`, the committed record of what
@@ -124,10 +125,11 @@ output:
 |---|---|
 | `create_index(coll, keys, name=None, **opts)` | `keys`: `"email"`, `["a", "b"]`, `[("a", 1), ("b", -1)]`; opts: `unique`, `sparse`, `partialFilterExpression`, `expireAfterSeconds`, `collation`, `hidden`… |
 | `drop_index(coll, name)` | skipped if missing |
-| `create_collection(name, validator=None, …)` / `drop_collection` / `rename_collection` | create is skipped if the collection exists |
+| `create_collection(name, validator=None, …)` / `drop_collection(name, backup=False)` / `rename_collection` | create is skipped if the collection exists |
 | `set_validator(coll, validator, level="moderate")` / `remove_validator(coll)` | `$jsonSchema` validators |
 | `backfill(coll, filter, update, batch_size=None)` | `update` may be an aggregation pipeline |
-| `unset_field(coll, field, filter=None)` / `rename_field(coll, old, new)` | batched |
+| `unset_field(coll, field, filter=None, backup=False)` / `rename_field(coll, old, new)` | batched; `backup=True` keeps restorable copies |
+| `restore_field(coll, field)` / `restore_collection(name)` | undo `backup=True` removals |
 
 For anything else, `ctx.collection("users")` is a plain PyMongo collection, and
 `ctx.unsafe_db` is the raw database.
@@ -269,8 +271,10 @@ handles commit hashes.
 | `history` | no | List revisions, newest first |
 | `merge [REVS...] [-m MSG]` | no | Join several heads into one |
 | `current [--check]` | yes | Applied vs pending (read-only); `--check` exits 1 if not up to date |
-| `upgrade [TARGET] [--steps N]` | yes | Apply pending revisions. `TARGET`: `head` (default), `heads`, or a revision |
-| `downgrade [TARGET] [--steps N] [--yes] [--force]` | yes | Revert one step (default), back to `TARGET`, or `base` |
+| `plan [TARGET]` | yes | Pending migrations with estimated impact and risk; changes nothing |
+| `upgrade [TARGET] [--steps N] [--dry-run] [--yes]` | yes | Apply pending revisions. `TARGET`: `head` (default), `heads`, or a revision |
+| `downgrade [TARGET] [--steps N] [--dry-run] [--yes] [--force]` | yes | Revert one step (default), back to `TARGET`, or `base` |
+| `backups [--drop REV --yes]` | yes | List/drop backups made with `backup=True` |
 | `stamp REV...` | yes | Mark revisions as applied **without running them** (baselines, checksum repair) |
 | `models` | no | The schema your registered models declare, plus storage warnings |
 | `inspect [COLL...] [--sample-size N \| --sample-percent P \| --full-scan]` | yes | The schema actually stored: fields, types, presence, indexes, validator |
@@ -280,8 +284,47 @@ Global options: `--config PATH`, `--env NAME`, `--json`, `--verbose`, `--version
 Exit codes: `0` success · `1` validation · `2` execution/connection · `3` configuration ·
 `4` revision conflict · `5` lock · `6` checksum mismatch.
 
+### Before you run: `plan` and `--dry-run`
+
+```console
+$ mongomig plan
+Migration plan for app (production)
+
+  786c0408ba16  add status and unique email              pending
+
+786c0408ba16  add status and unique email   Risk: HIGH
+  users  backfill      $set status                  ~1,100,000 docs · collection scan
+  users  create_index  users_email_unique (unique)  1,100,000 docs
+         ⚠ will fail: duplicate values exist, e.g. {'email': 'u0@x.io'}
+  reversible: yes · deletes data: no · resumable: yes (ctx.ops are idempotent)
+  why HIGH: ~1.1M documents with a collection scan (users.backfill); expected to fail (users.create_index)
+
+1 migration(s) · ~1,100,000 document writes · highest risk HIGH
+Estimates only; nothing was changed.
+```
+
+`mongomig plan`, `upgrade --dry-run` and `downgrade --dry-run` run your migrations in
+recording mode. Reads go to MongoDB, and writes are recorded with document estimates instead
+of being executed. The report shows:
+- whether a filter needs a collection scan
+- whether a new unique index would fail on existing duplicates
+- how many existing documents a new validator rejects
+- whether anything deletes data
+
+A migration using `ctx.unsafe_db` is reported as "not fully simulated". Migration code really
+runs during a dry run (only its database writes are intercepted), so keep side effects inside
+`ctx`.
+
 ### Safety
 
+- **Confirmation**: `upgrade` asks before running migrations that can delete data or are
+  irreversible, and in scripts it requires `--yes`. The check reads the migration code rather
+  than running it. Set `execution.confirm: always` (e.g. in `mongomig.production.yaml`) to
+  confirm every run, or `never` to turn it off. From Python, `upgrade_to_head(yes=True)`.
+- **Backups**: `ctx.ops.unset_field(..., backup=True)` copies the values to
+  `__mongomig_backup_<revision>` first, and `ctx.ops.drop_collection(..., backup=True)`
+  renames the collection instead of dropping it. `restore_field` / `restore_collection` undo
+  them (put them in `downgrade`). List or clean up with `mongomig backups`.
 - **Locking**: `upgrade`, `downgrade` and `stamp` take a distributed lock
   (`__mongomig_lock`) with a heartbeat, so two runners never migrate at the same time. Use
   `--lock-timeout SECONDS` to wait for another run instead of failing.
@@ -320,7 +363,7 @@ available synchronously: `mongomig.upgrade()`, `mongomig.downgrade()`, `mongomig
 - [x] **M2 Migration engine**: `upgrade`, `downgrade`, locking, `merge`, checksums, FastAPI lifespan helper
 - [x] **M3 Schema engine**: `@collection` models, Beanie support, `inspect`, snapshots
 - [x] **M4 Autogenerate**: `diff`, `revision --autogenerate`, index/validator diff
-- [ ] **M5 Production safety**: `--dry-run`, `plan`, impact analysis, backups for destructive ops
+- [x] **M5 Production safety**: `--dry-run`, `plan`, impact analysis, backups for destructive ops
 - [ ] **M6 Release**: `validate`, `doctor`, docs, PyPI
 
 ## Development

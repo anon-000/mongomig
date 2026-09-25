@@ -16,6 +16,9 @@ migrations:
   lock_collection: __mongomig_lock
 
 execution:
+  # Ask before running migrations: destructive (default) | always | never.
+  # Tip: set `confirm: always` in mongomig.production.yaml.
+  confirm: destructive
   batch_size: 1000
   sleep_ms_between_batches: 0
   max_retries: 3

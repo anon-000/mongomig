@@ -21,6 +21,7 @@ def run(
     yes: bool,
     force: bool,
     lock_timeout: float,
+    dry_run: bool = False,
 ) -> None:
     from mongomig.cli.reporting import ConsoleReporter
     from mongomig.database.client import open_database
@@ -28,6 +29,14 @@ def run(
 
     config = load_config(opts, out)
     graph = load_graph(config)
+
+    if dry_run:
+        from mongomig.cli.commands._plan import analyses_data, render_analyses
+
+        with open_database(config) as db:
+            analyses = Executor(config, graph, db).analyze("downgrade", target, steps=steps)
+        out.result(analyses_data(analyses), lambda con: render_analyses(con, analyses))
+        return
 
     def confirm(plan: list[Script]) -> bool:
         if yes:

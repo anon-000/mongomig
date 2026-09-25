@@ -204,6 +204,10 @@ LockTimeoutOpt = Annotated[
         help="Seconds to wait if another run holds the migration lock (default: fail fast).",
     ),
 ]
+DryRunOpt = Annotated[
+    bool,
+    typer.Option("--dry-run", help="Show what would happen, with estimates; change nothing."),
+]
 StepsOpt = Annotated[
     int | None, typer.Option("--steps", "-n", min=1, help="Only this many revisions.")
 ]
@@ -230,10 +234,37 @@ def upgrade(
     ] = "head",
     steps: StepsOpt = None,
     lock_timeout: LockTimeoutOpt = 0,
+    dry_run: DryRunOpt = False,
+    yes: Annotated[
+        bool,
+        typer.Option("--yes", "-y", help="Don't ask before destructive/irreversible migrations."),
+    ] = False,
     json_: JsonOpt = False,
 ) -> None:
-    """Apply pending migrations."""
-    _run(ctx, "upgrade", json_=json_, target=target, steps=steps, lock_timeout=lock_timeout)
+    """Apply pending migrations (asks first if they can delete data)."""
+    _run(
+        ctx,
+        "upgrade",
+        json_=json_,
+        target=target,
+        steps=steps,
+        lock_timeout=lock_timeout,
+        dry_run=dry_run,
+        yes=yes,
+    )
+
+
+@app.command()
+def plan(
+    ctx: typer.Context,
+    target: Annotated[
+        str, typer.Argument(help="'head' (default), 'heads', or a revision id/prefix.")
+    ] = "head",
+    steps: StepsOpt = None,
+    json_: JsonOpt = False,
+) -> None:
+    """Show pending migrations and their estimated impact and risk (changes nothing)."""
+    _run(ctx, "plan", json_=json_, target=target, steps=steps)
 
 
 @app.command()
@@ -252,6 +283,7 @@ def downgrade(
         typer.Option("--force", help="Allow passing through irreversible migrations."),
     ] = False,
     lock_timeout: LockTimeoutOpt = 0,
+    dry_run: DryRunOpt = False,
     json_: JsonOpt = False,
 ) -> None:
     """Revert applied migrations (asks for confirmation)."""
@@ -264,6 +296,7 @@ def downgrade(
         yes=yes,
         force=force,
         lock_timeout=lock_timeout,
+        dry_run=dry_run,
     )
 
 
@@ -315,6 +348,20 @@ def inspect(
 def models(ctx: typer.Context, json_: JsonOpt = False) -> None:
     """Show the schema your registered models declare (as MongoMig maps them to BSON)."""
     _run(ctx, "models", json_=json_)
+
+
+@app.command()
+def backups(
+    ctx: typer.Context,
+    drop: Annotated[
+        list[str] | None,
+        typer.Option("--drop", help="Drop backups of this revision (or exact collection name)."),
+    ] = None,
+    yes: Annotated[bool, typer.Option("--yes", "-y", help="Don't ask for confirmation.")] = False,
+    json_: JsonOpt = False,
+) -> None:
+    """List (or drop) backups made by unset_field/drop_collection with backup=True."""
+    _run(ctx, "backups", json_=json_, drop=drop or [], yes=yes)
 
 
 def main() -> None:

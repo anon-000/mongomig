@@ -254,7 +254,13 @@ def test_irreversible_downgrade(versions: Path, mongo_db: Database[dict[str, Any
         reversible=False,
         minute=1,
     )
-    cli("upgrade")
+    code, output = cli("upgrade")  # can delete data + irreversible: needs confirmation
+    assert code == 1
+    assert "drop2 can delete data" in output
+    assert "drop2 is irreversible" in output
+    assert applied(mongo_db) == set()
+    code, output = cli("upgrade", "--yes")
+    assert code == 0, output
     code, output = cli("downgrade", "base", "--yes")
     assert code == 2
     assert "reversible = False" in output

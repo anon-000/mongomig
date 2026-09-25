@@ -100,7 +100,7 @@ def test_manual_review_items_are_commented_out() -> None:
     assert "TODO(review): email" in up
     assert "TODO(review): age" in up
     assert '"$convert"' in up
-    assert '# ctx.ops.unset_field("users", "old")' in up
+    assert '# ctx.ops.unset_field("users", "old", backup=True)' in up
     assert len(gen.review) == 2
 
 

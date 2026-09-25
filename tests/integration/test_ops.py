@@ -153,3 +153,14 @@ def test_collection_and_unsafe_db_are_plain_pymongo(
     ctx.collection("things").insert_one({"a": 1})
     assert ctx.unsafe_db["things"].count_documents({}) == 1
     assert ctx.database_name == mongo_db.name
+
+
+def test_unset_and_rename_respect_filter_on_same_field(
+    ctx: MigrationContext, mongo_db: Database[dict[str, Any]]
+) -> None:
+    users = mongo_db["users"]
+    users.insert_many([{"legacy": 0}, {"legacy": 1}, {"legacy": 2}, {"old": "a", "keep": True}])
+    assert ctx.ops.unset_field("users", "legacy", filter={"legacy": 0}).modified == 1
+    assert users.count_documents({"legacy": {"$exists": True}}) == 2
+    ctx.ops.rename_field("users", "old", "new", filter={"old": "zzz"})
+    assert users.count_documents({"old": "a"}) == 1  # filter didn't match: untouched

@@ -11,6 +11,7 @@ if TYPE_CHECKING:
     from pymongo.collection import Collection
     from pymongo.database import Database
 
+    from mongomig.migrations.dryrun import Recorder
     from mongomig.migrations.lock import MigrationLock
     from mongomig.migrations.ops import Operations
 
@@ -51,6 +52,7 @@ class MigrationContext:
         direction: Direction = "upgrade",
         environment: str | None = None,
         lock: MigrationLock | None = None,
+        recorder: Recorder | None = None,
     ) -> None:
         self._db = db
         self.batch_size = batch_size
@@ -61,6 +63,7 @@ class MigrationContext:
         self.direction: Direction = direction
         self.environment = environment
         self._lock = lock
+        self.recorder = recorder
         self._ops: Operations | None = None
         self.current: OperationState | None = None
 
@@ -72,11 +75,30 @@ class MigrationContext:
             self._ops = Operations(self)
         return self._ops
 
+    @property
+    def dry_run(self) -> bool:
+        """True while ``plan`` / ``--dry-run`` records this migration instead of running it."""
+        return self.recorder is not None
+
     def collection(self, name: str) -> Collection[dict[str, Any]]:
+        if self.recorder is not None:
+            from mongomig.migrations.dryrun import RecordingCollection
+
+            # Duck-typed stand-in: reads hit MongoDB, writes are only recorded.
+            return RecordingCollection(self._db[name], self.recorder)  # type: ignore[return-value]
         return self._db[name]
 
     @property
     def unsafe_db(self) -> Database[dict[str, Any]]:
+        if self.recorder is not None:
+            from mongomig.migrations.dryrun import DryRunUnavailable
+
+            raise DryRunUnavailable("the migration uses ctx.unsafe_db")
+        return self._db
+
+    @property
+    def db(self) -> Database[dict[str, Any]]:
+        """The real database, for ``ctx.ops`` internals (reads only in dry-run mode)."""
         return self._db
 
     @property

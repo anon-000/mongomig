@@ -33,8 +33,13 @@ def upgrade(
     steps: int | None = None,
     lock_timeout: float = 0,
     reporter: Reporter | None = None,
+    yes: bool = False,
 ) -> RunResult:
-    """Apply pending migrations up to ``target`` (``head``, ``heads`` or a revision)."""
+    """Apply pending migrations up to ``target`` (``head``, ``heads`` or a revision).
+
+    Migrations that can delete data (or all of them with ``execution.confirm: always``) raise
+    ``ConfirmationRequiredError`` unless ``yes=True``.
+    """
     from mongomig.config.loader import load_config
     from mongomig.database.client import open_database
     from mongomig.migrations.executor import Executor
@@ -45,7 +50,12 @@ def upgrade(
     graph = RevisionGraph(load_scripts(loaded.versions_dir))
     with open_database(loaded) as db:
         executor = Executor(loaded, graph, db, reporter=reporter or LoggingReporter())
-        return executor.upgrade(target, steps=steps, lock_timeout=lock_timeout)
+        return executor.upgrade(
+            target,
+            steps=steps,
+            lock_timeout=lock_timeout,
+            confirm=(lambda _plan, _reasons: True) if yes else None,
+        )
 
 
 def downgrade(
@@ -83,13 +93,17 @@ def upgrade_to_head(
     env: str | None = None,
     lock_timeout: float = DEFAULT_LOCK_TIMEOUT_S,
     reporter: Reporter | None = None,
+    yes: bool = False,
 ) -> RunResult:
     """Upgrade to the single head, waiting up to ``lock_timeout`` for another runner.
 
     Safe to call from every app worker at startup: one acquires the lock and migrates, the
-    others wait for it and then find nothing pending.
+    others wait for it and then find nothing pending. Migrations that can delete data are
+    refused unless ``yes=True``; run those from a deploy job instead.
     """
-    return upgrade("head", config=config, env=env, lock_timeout=lock_timeout, reporter=reporter)
+    return upgrade(
+        "head", config=config, env=env, lock_timeout=lock_timeout, reporter=reporter, yes=yes
+    )
 
 
 async def aupgrade_to_head(
@@ -98,8 +112,14 @@ async def aupgrade_to_head(
     env: str | None = None,
     lock_timeout: float = DEFAULT_LOCK_TIMEOUT_S,
     reporter: Reporter | None = None,
+    yes: bool = False,
 ) -> RunResult:
     """``upgrade_to_head`` for async code (runs in a worker thread; doesn't block the loop)."""
     return await asyncio.to_thread(
-        upgrade_to_head, config=config, env=env, lock_timeout=lock_timeout, reporter=reporter
+        upgrade_to_head,
+        config=config,
+        env=env,
+        lock_timeout=lock_timeout,
+        reporter=reporter,
+        yes=yes,
     )
