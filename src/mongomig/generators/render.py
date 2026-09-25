@@ -109,9 +109,11 @@ def _collection_removed(change: Change) -> Block:
         PHASE_COLLECTIONS,
         up=[
             f"# TODO(review): collection {name} is no longer in the models; its data is kept.",
-            "# To delete it (irreversible):",
-            f"# ctx.ops.drop_collection({lit(name)})",
+            "# To remove it, keeping a restorable backup (drop the backup later with",
+            "# `mongomig backups --drop <revision>`):",
+            f"# ctx.ops.drop_collection({lit(name)}, backup=True)",
         ],
+        down=[f"# ctx.ops.restore_collection({lit(name)})"],
     )
 
 
@@ -154,9 +156,10 @@ def _field_removed(change: Change) -> Block:
         PHASE_DATA,
         up=[
             f"# {path} was removed from the model; existing data is kept.",
-            "# To delete it from all documents (irreversible):",
-            *_commented(_call("ctx.ops.unset_field", change.collection, path)),
+            "# To delete it from all documents, keeping a restorable backup:",
+            *_commented(_call("ctx.ops.unset_field", change.collection, path, backup=True)),
         ],
+        down=_commented(_call("ctx.ops.restore_field", change.collection, path)),
     )
 
 

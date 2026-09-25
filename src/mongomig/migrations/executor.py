@@ -14,6 +14,7 @@ from typing import TYPE_CHECKING, Any
 from mongomig.database.redact import redact_text
 from mongomig.errors import (
     ChecksumMismatchError,
+    ConfirmationRequiredError,
     IrreversibleMigrationError,
     MigrationExecutionError,
     RevisionNotFoundError,
@@ -36,9 +37,13 @@ if TYPE_CHECKING:
     from pymongo.database import Database
 
     from mongomig.config.models import LoadedConfig
+    from mongomig.migrations.dryrun import RecordedOp
+    from mongomig.safety.impact import Assessment
 
 # Called with the planned scripts before a downgrade runs; return False to abort.
 ConfirmFn = Callable[[list[Script]], bool]
+# Called before an upgrade that needs confirmation, with the reasons; return False to abort.
+UpgradeConfirmFn = Callable[[list[Script], list[str]], bool]
 
 
 @dataclass(frozen=True)
@@ -48,6 +53,55 @@ class StepResult:
     direction: Direction
     duration_ms: int
     skipped_code: bool = False  # irreversible migration removed from tracking with --force
+
+
+@dataclass
+class MigrationAnalysis:
+    """What a dry run of one migration found."""
+
+    script: Script
+    direction: Direction
+    ops: list[RecordedOp]
+    assessment: Assessment
+    unavailable: str | None = None  # couldn't be fully simulated (e.g. ctx.unsafe_db)
+    error: str | None = None  # the migration raised during the dry run
+
+    @property
+    def destructive(self) -> bool:
+        return any(op.destructive for op in self.ops)
+
+    @property
+    def resumable(self) -> bool | None:
+        """ctx.ops-only migrations are idempotent, so re-running after a crash is safe."""
+        if self.unavailable or self.error:
+            return None
+        return all(op.exact for op in self.ops) or None
+
+    @property
+    def estimated_docs(self) -> int:
+        return sum(
+            op.estimated_docs or 0
+            for op in self.ops
+            if not op.operation.startswith(
+                ("create_index", "drop_index", "set_validator", "remove_validator")
+            )
+        )
+
+    def to_dict(self) -> dict[str, Any]:
+        return {
+            "revision": self.script.revision,
+            "message": self.script.message,
+            "direction": self.direction,
+            "risk": self.assessment.risk.name,
+            "reasons": self.assessment.reasons,
+            "reversible": self.script.reversible,
+            "destructive": self.destructive,
+            "resumable": self.resumable,
+            "estimated_docs": self.estimated_docs,
+            "unavailable": self.unavailable,
+            "error": self.error,
+            "operations": [op.to_dict() for op in self.ops],
+        }
 
 
 @dataclass
@@ -168,13 +222,35 @@ class Executor:
         return compute_state(self.graph, self.tracker.records())
 
     def upgrade(
-        self, target: str = "head", *, steps: int | None = None, lock_timeout: float = 0
+        self,
+        target: str = "head",
+        *,
+        steps: int | None = None,
+        lock_timeout: float = 0,
+        confirm: UpgradeConfirmFn | None = None,
     ) -> RunResult:
+        """Apply pending migrations.
+
+        If the plan needs confirmation (see ``execution.confirm``), ``confirm`` is called with
+        the reasons; without a ``confirm`` callback such a plan raises
+        ``ConfirmationRequiredError`` instead of running.
+        """
         result = RunResult(direction="upgrade")
         with self.lock.hold(lock_timeout):
             self.tracker.ensure()
             state = self._checked_state()
             plan = plan_upgrade(self.graph, state.applied, target, steps=steps)
+            reasons = confirmation_reasons(plan, self.config.settings.execution.confirm)
+            if reasons:
+                if confirm is None:
+                    raise ConfirmationRequiredError(
+                        "These migrations need confirmation: " + "; ".join(reasons),
+                        suggestion="Review them (`mongomig plan`), then re-run with --yes.",
+                        details={"reasons": reasons},
+                    )
+                if not confirm(plan, reasons):
+                    result.aborted = True
+                    return result
             meta = self._meta()
             for script in plan:
                 self.lock.check()
@@ -227,7 +303,63 @@ class Executor:
             self.tracker.stamp(scripts, meta=meta)
         return scripts
 
+    def analyze(
+        self,
+        direction: Direction = "upgrade",
+        target: str | None = None,
+        *,
+        steps: int | None = None,
+    ) -> list[MigrationAnalysis]:
+        """Dry-run the planned migrations: record their operations, estimate their impact.
+
+        Nothing is written and the lock isn't taken. Each migration is simulated against the
+        *current* data, so estimates for later migrations in a chain are approximate.
+        """
+        state = self._checked_state()
+        if direction == "upgrade":
+            plan = plan_upgrade(self.graph, state.applied, target or "head", steps=steps)
+        else:
+            plan = plan_downgrade(self.graph, state.applied, target, steps=steps)
+        return [self._simulate(script, direction) for script in plan]
+
     # --- internals -----------------------------------------------------------------------
+
+    def _simulate(self, script: Script, direction: Direction) -> MigrationAnalysis:
+        from mongomig.migrations.dryrun import DryRunUnavailable, Recorder
+        from mongomig.safety.impact import assess
+
+        recorder = Recorder()
+        ctx = MigrationContext(
+            self.db,
+            batch_size=self.config.settings.execution.batch_size,
+            reporter=Reporter(),
+            revision=script.revision,
+            direction=direction,
+            environment=self.config.environment,
+            recorder=recorder,
+        )
+        unavailable = error = None
+        if direction == "downgrade" and not script.has_downgrade:
+            unavailable = "no downgrade() function"
+        else:
+            module = load_migration_module(script, self.config.root_dir)
+            try:
+                getattr(module, direction)(ctx)
+            except DryRunUnavailable as exc:
+                unavailable = str(exc)
+            except Exception as exc:
+                error = redact_text(f"{type(exc).__name__}: {exc}")
+        assessment = assess(
+            recorder.ops, reversible=script.reversible, unavailable=unavailable, error=error
+        )
+        return MigrationAnalysis(
+            script=script,
+            direction=direction,
+            ops=recorder.ops,
+            assessment=assessment,
+            unavailable=unavailable,
+            error=error,
+        )
 
     def _checked_state(self) -> CurrentState:
         state = self.state()
@@ -299,6 +431,25 @@ class Executor:
             self.tracker.remove(script.revision)
         self.reporter.migration_finished(script, direction, duration_ms)
         return StepResult(script.revision, script.message, direction, duration_ms)
+
+
+def confirmation_reasons(plan: list[Script], mode: str) -> list[str]:
+    """Why an upgrade needs confirmation (empty: it doesn't). Reads code; runs nothing."""
+    from mongomig.safety.impact import destructive_calls
+
+    if mode == "never" or not plan:
+        return []
+    reasons: list[str] = []
+    for script in plan:
+        calls = destructive_calls(script)
+        if calls:
+            more = f" (+{len(calls) - 1} more)" if len(calls) > 1 else ""
+            reasons.append(f"{script.revision} can delete data: {calls[0]}{more}")
+        if not script.reversible:
+            reasons.append(f"{script.revision} is irreversible")
+    if mode == "always" and not reasons:
+        reasons.append(f"{len(plan)} revision(s) will be applied (execution.confirm = always)")
+    return reasons
 
 
 def load_migration_module(script: Script, project_root: Path) -> ModuleType:

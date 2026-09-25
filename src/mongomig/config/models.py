@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from pathlib import Path
+from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, Field, PositiveInt, field_validator
 
@@ -37,6 +38,9 @@ class MigrationsConfig(_Section):
 
 class ExecutionConfig(_Section):
     batch_size: PositiveInt = 1000
+    # When `upgrade` asks for confirmation (or needs --yes): "destructive" = migrations that
+    # can delete data or are irreversible; "always" = every run (e.g. in production); "never".
+    confirm: Literal["destructive", "always", "never"] = "destructive"
     sleep_ms_between_batches: int = Field(default=0, ge=0)
     max_retries: int = Field(default=3, ge=0)
     lock_ttl_seconds: PositiveInt = 300
