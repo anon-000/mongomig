@@ -25,6 +25,13 @@ app = typer.Typer(
 )
 
 JsonOpt = Annotated[bool, typer.Option("--json", help="Machine-readable JSON output.")]
+RenameOpt = Annotated[
+    list[str] | None,
+    typer.Option(
+        "--rename",
+        help="Treat a removed+added field as a rename: COLLECTION.OLD:NEW (repeatable).",
+    ),
+]
 
 
 def _version_callback(value: bool) -> None:
@@ -107,10 +114,55 @@ def revision(
     rev_id: Annotated[
         str | None, typer.Option("--rev-id", help="Use this revision id instead of a random one.")
     ] = None,
+    autogenerate: Annotated[
+        bool,
+        typer.Option(
+            "--autogenerate", help="Generate the migration from model changes (see `diff`)."
+        ),
+    ] = False,
+    rename: RenameOpt = None,
     json_: JsonOpt = False,
 ) -> None:
-    """Create a new, empty revision file."""
-    _run(ctx, "revision", json_=json_, message=message, head=head, rev_id=rev_id)
+    """Create a new revision: empty, or --autogenerate'd from model changes."""
+    _run(
+        ctx,
+        "revision",
+        json_=json_,
+        message=message,
+        head=head,
+        rev_id=rev_id,
+        autogenerate=autogenerate,
+        renames=rename or [],
+    )
+
+
+@app.command()
+def diff(
+    ctx: typer.Context,
+    check: Annotated[
+        bool,
+        typer.Option("--check", help="Exit with code 1 if models changed without a migration."),
+    ] = False,
+    rename: RenameOpt = None,
+    json_: JsonOpt = False,
+) -> None:
+    """Show what changed in your models since the last migration (offline)."""
+    _run(ctx, "diff", json_=json_, check=check, renames=rename or [])
+
+
+@app.command()
+def baseline(
+    ctx: typer.Context,
+    message: Annotated[str, typer.Option("--message", "-m", help="Short description.")] = (
+        "baseline"
+    ),
+    force: Annotated[
+        bool, typer.Option("--force", help="Overwrite a non-empty schema snapshot.")
+    ] = False,
+    json_: JsonOpt = False,
+) -> None:
+    """Adopt MongoMig on an existing database: snapshot the current models, no data changes."""
+    _run(ctx, "baseline", json_=json_, message=message, force=force)
 
 
 @app.command()

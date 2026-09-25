@@ -14,6 +14,14 @@ from string import Template
 from mongomig.errors import ScriptError
 
 REVISION_ID_RE = re.compile(r"^[A-Za-z0-9_]{1,64}$")
+
+DEFAULT_UPGRADE_BODY = """\
+    # Examples:
+    #   ctx.ops.create_index("users", "email", unique=True)
+    #   ctx.ops.backfill("users", {"status": {"$exists": False}}, {"$set": {"status": "active"}})
+    #   users = ctx.collection("users")  # plain PyMongo collection for custom logic
+    pass"""
+DEFAULT_DOWNGRADE_BODY = "    pass"
 MAX_SLUG_LENGTH = 40
 
 
@@ -52,6 +60,10 @@ def render_revision(
     down_revision: str | tuple[str, ...] | None,
     snapshot_hash: str | None,
     created: datetime,
+    upgrade_body: str | None = None,
+    downgrade_body: str | None = None,
+    notes: str = "",
+    reversible: bool = True,
 ) -> str:
     template = Template(
         files("mongomig").joinpath("templates/revision.py.tmpl").read_text(encoding="utf-8")
@@ -62,7 +74,11 @@ def render_revision(
         down_text = down_revision or "<base>"
     return template.substitute(
         # The docstring must not be terminated early by the message itself.
-        message=message.replace("\\", "\\\\").replace('"""', "'''").strip() or "empty message",
+        message=_docstring_safe(message).strip() or "empty message",
+        notes=f"\n{_docstring_safe(notes.rstrip())}\n" if notes.strip() else "",
+        reversible=repr(reversible),
+        upgrade_body=upgrade_body or DEFAULT_UPGRADE_BODY,
+        downgrade_body=downgrade_body or DEFAULT_DOWNGRADE_BODY,
         revision=rev_id,
         down_revision_text=down_text,
         created=f"{created:%Y-%m-%d %H:%M:%S}",
@@ -70,6 +86,11 @@ def render_revision(
         down_revision_repr=_py_literal(down_revision),
         snapshot_hash_repr=_py_literal(snapshot_hash),
     )
+
+
+def _docstring_safe(text: str) -> str:
+    """Text that can't terminate or break the module docstring."""
+    return text.replace("\\", "\\\\").replace('"""', "'''")
 
 
 def _py_literal(value: str | tuple[str, ...] | None) -> str:
@@ -89,6 +110,10 @@ def write_revision(
     snapshot_hash: str | None,
     rev_id: str | None = None,
     now: datetime | None = None,
+    upgrade_body: str | None = None,
+    downgrade_body: str | None = None,
+    notes: str = "",
+    reversible: bool = True,
 ) -> tuple[str, Path]:
     rev_id = validate_revision_id(rev_id) if rev_id else new_revision_id()
     created = now or datetime.now(UTC)
@@ -101,7 +126,17 @@ def write_revision(
         down_revision=down_revision,
         snapshot_hash=snapshot_hash,
         created=created,
+        upgrade_body=upgrade_body,
+        downgrade_body=downgrade_body,
+        notes=notes,
+        reversible=reversible,
     )
+    import ast
+
+    try:
+        ast.parse(content)
+    except SyntaxError as exc:  # never write a broken file
+        raise ScriptError(f"Generated revision is not valid Python: {exc}") from exc
     versions_dir.mkdir(parents=True, exist_ok=True)
     path.write_text(content, encoding="utf-8")
     return rev_id, path
