@@ -3,6 +3,7 @@
 | Guide | Read it when you want to... |
 |---|---|
 | [Getting started](getting-started.md) | install MongoMig and run a first migration (new or existing project) |
+| [Coming from Alembic or scripts](comparison.md) | map what you know to MongoMig, and see when it fits |
 | [Concepts](concepts.md) | understand snapshots, storage profiles, classifications and the revision graph |
 | [Writing migrations](writing-migrations.md) | write `upgrade`/`downgrade` by hand; `ctx` and `ctx.ops` reference |
 | [Autogenerate](autogenerate.md) | go from model changes to reviewed migrations |
