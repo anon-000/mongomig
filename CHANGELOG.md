@@ -6,6 +6,28 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+## [0.1.0] — 2026-09-25
+
+First stable-track release: the MVP defined in the PRD is complete.
+
+### Added
+- `mongomig validate`: one command for CI. It checks configuration, revision files and
+  imports, a single head, that every model change has a migration, and snapshot consistency.
+  `--database` adds applied-checksum, failed-run and unknown-revision checks, and `--strict`
+  turns type-mapping warnings into failures.
+- `mongomig doctor`: environment diagnostics covering versions, configuration, connection,
+  server version and topology, clock skew, **the connected user's privileges** (required and
+  optional actions), failed runs, lock holder, and leftover backups.
+- `plan` flags operations on sharded collections.
+- Documentation in `docs/`: getting started, concepts, writing migrations, autogenerate,
+  production guide (incl. minimum permissions), CLI reference, Python API, troubleshooting.
+- Example projects `examples/fastapi_pydantic` and `examples/fastapi_beanie`, tested in CI.
+
+### Changed
+- Autogenerate: under a **strict** managed validator, new fields defaulting to `None` are
+  backfilled (strict validation rejects updates to documents missing a required field).
+- Generated code wraps long literals more accurately.
+
 ## [0.1.0a2] — 2026-09-25
 
 ### Added

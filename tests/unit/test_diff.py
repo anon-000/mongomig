@@ -240,3 +240,13 @@ def test_field_added_with_none_default_needs_no_backfill() -> None:
     )
     assert change.severity == Severity.SAFE
     assert "no backfill" in change.note
+
+
+def test_none_default_needs_backfill_under_strict_validator() -> None:
+    field = f("int", nullable=True, has_default=True, default=None, default_is_static=True)
+    strict = coll(age=field)
+    strict.validator, strict.validation_level = {"$jsonSchema": {}}, "strict"
+    old = coll()
+    old.validator, old.validation_level = {"$jsonSchema": {}}, "strict"
+    change = next(c for c in changes(old, strict) if c.kind == "field_added")
+    assert change.severity == Severity.REQUIRES_DATA_MIGRATION  # strict rejects docs without it

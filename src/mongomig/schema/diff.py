@@ -13,7 +13,7 @@ from __future__ import annotations
 
 import difflib
 from collections.abc import Iterator, Mapping
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from enum import IntEnum
 from typing import Any
 
@@ -188,6 +188,8 @@ def diff_schemas(
             used_renames |= {
                 (name, c.path or "") for c in field_changes if c.kind == "field_renamed"
             }
+            if after.validator is not None and after.validation_level == "strict":
+                field_changes = [_strict_backfill(c) for c in field_changes]
             result.changes.extend(field_changes)
             result.changes.extend(_index_changes(name, before.indexes, after.indexes))
             result.changes.extend(_validator_changes(name, before, after))
@@ -262,6 +264,18 @@ def _field_changes(
     if "[]" not in prefix:  # rename_field can't reach into arrays
         hints.extend(_rename_hints(collection, prefix, removed, added, old, new))
     return changes
+
+
+def _strict_backfill(change: Change) -> Change:
+    """Under a strict validator, documents missing a required field reject every update, so
+    a field defaulting to None must be backfilled after all."""
+    if change.kind == "field_added" and change.severity == Severity.SAFE and change.new.required:
+        return replace(
+            change,
+            severity=Severity.REQUIRES_DATA_MIGRATION,
+            note="strict validator requires it: backfill existing documents with None",
+        )
+    return change
 
 
 def _field_added(collection: str, path: str, new: FieldSchema) -> Change:

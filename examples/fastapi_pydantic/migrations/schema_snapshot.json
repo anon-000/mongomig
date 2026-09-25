@@ -1,0 +1,244 @@
+{
+  "collections": {
+    "orders": {
+      "fields": {
+        "_id": {
+          "bson_types": [
+            "objectId"
+          ],
+          "nullable": false,
+          "required": true
+        },
+        "created_at": {
+          "bson_types": [
+            "date"
+          ],
+          "default": {
+            "dynamic": true
+          },
+          "nullable": false,
+          "required": true
+        },
+        "total": {
+          "bson_types": [
+            "double"
+          ],
+          "nullable": false,
+          "required": true
+        },
+        "user_email": {
+          "bson_types": [
+            "string"
+          ],
+          "nullable": false,
+          "required": true
+        }
+      },
+      "indexes": [
+        {
+          "keys": [
+            [
+              "user_email",
+              1
+            ],
+            [
+              "created_at",
+              -1
+            ]
+          ],
+          "name": "user_email_1_created_at_-1"
+        }
+      ],
+      "model": "userservice.models.Order",
+      "validator": null
+    },
+    "users": {
+      "fields": {
+        "_id": {
+          "bson_types": [
+            "objectId"
+          ],
+          "nullable": false,
+          "required": true
+        },
+        "created_at": {
+          "bson_types": [
+            "date"
+          ],
+          "default": {
+            "dynamic": true
+          },
+          "nullable": false,
+          "required": true
+        },
+        "email": {
+          "bson_types": [
+            "string"
+          ],
+          "nullable": false,
+          "required": true
+        },
+        "name": {
+          "bson_types": [
+            "string"
+          ],
+          "nullable": false,
+          "required": true
+        },
+        "phone": {
+          "bson_types": [
+            "string"
+          ],
+          "default": {
+            "value": null
+          },
+          "nullable": true,
+          "required": true
+        },
+        "profile": {
+          "bson_types": [
+            "object"
+          ],
+          "default": {
+            "dynamic": true
+          },
+          "fields": {
+            "bio": {
+              "bson_types": [
+                "string"
+              ],
+              "default": {
+                "value": null
+              },
+              "nullable": true,
+              "required": true
+            },
+            "email_verified": {
+              "bson_types": [
+                "bool"
+              ],
+              "default": {
+                "value": false
+              },
+              "nullable": false,
+              "required": true
+            }
+          },
+          "nullable": false,
+          "required": true
+        },
+        "role": {
+          "bson_types": [
+            "string"
+          ],
+          "default": {
+            "value": "member"
+          },
+          "nullable": false,
+          "required": true
+        },
+        "status": {
+          "bson_types": [
+            "string"
+          ],
+          "default": {
+            "value": "active"
+          },
+          "nullable": false,
+          "required": true
+        }
+      },
+      "indexes": [
+        {
+          "keys": [
+            [
+              "role",
+              1
+            ]
+          ],
+          "name": "role_1"
+        },
+        {
+          "keys": [
+            [
+              "email",
+              1
+            ]
+          ],
+          "name": "users_email_unique",
+          "unique": true
+        }
+      ],
+      "model": "userservice.models.User",
+      "validation_action": "error",
+      "validation_level": "moderate",
+      "validator": {
+        "$jsonSchema": {
+          "bsonType": "object",
+          "properties": {
+            "_id": {
+              "bsonType": "objectId"
+            },
+            "created_at": {
+              "bsonType": "date"
+            },
+            "email": {
+              "bsonType": "string"
+            },
+            "name": {
+              "bsonType": "string"
+            },
+            "phone": {
+              "bsonType": [
+                "string",
+                "null"
+              ]
+            },
+            "profile": {
+              "bsonType": "object",
+              "properties": {
+                "bio": {
+                  "bsonType": [
+                    "string",
+                    "null"
+                  ]
+                },
+                "email_verified": {
+                  "bsonType": "bool"
+                }
+              },
+              "required": [
+                "bio",
+                "email_verified"
+              ]
+            },
+            "role": {
+              "bsonType": "string"
+            },
+            "status": {
+              "bsonType": "string"
+            }
+          },
+          "required": [
+            "_id",
+            "name",
+            "email",
+            "status",
+            "role",
+            "phone",
+            "profile",
+            "created_at"
+          ]
+        }
+      }
+    }
+  },
+  "mongomig_format": 1,
+  "storage": {
+    "by_alias": true,
+    "exclude_none": false,
+    "exclude_unset": false,
+    "mode": "python",
+    "type_overrides": {}
+  }
+}

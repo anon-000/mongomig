@@ -1,0 +1,28 @@
+# MongoMig configuration.
+# Values support ${VAR} and ${VAR:-default} environment-variable interpolation.
+# Environment overlays: mongomig.<env>.yaml is merged on top when running
+# `mongomig --env <env> ...` (or MONGOMIG_ENV=<env>).
+
+database:
+  # Never put credentials here — keep them in the environment.
+  uri: ${MONGODB_URI}
+  # Optional if the URI already contains the database name.
+  name: ${MONGODB_DATABASE:-userservice}
+  server_selection_timeout_ms: 5000
+
+migrations:
+  directory: migrations
+  tracking_collection: __mongomig_migrations
+  lock_collection: __mongomig_lock
+
+execution:
+  # Ask before running migrations: destructive (default) | always | never.
+  # Tip: set `confirm: always` in mongomig.production.yaml.
+  confirm: destructive
+  batch_size: 1000
+  sleep_ms_between_batches: 0
+  max_retries: 3
+  lock_ttl_seconds: 300
+
+sampling:
+  size: 10000
