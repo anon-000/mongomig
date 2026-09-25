@@ -4,32 +4,36 @@
 
 Built for Python services (FastAPI, Flask, workers) on PyMongo, Motor or Beanie.
 
-> **Status: pre-alpha.** Writing and running migrations works (M1 + M2), and MongoMig can
-> read your models and inspect your data (M3). Schema diff and autogenerate are next.
+> **Status: alpha.** The core workflow works end to end: models → diff → autogenerate →
+> review → upgrade/downgrade. Expect rough edges; feedback is welcome.
 
 ```console
-$ mongomig revision -m "add user status"
-Created revision d03be90b1aee → migrations/versions/20260925_1012_d03be90b1aee_add_user_status.py
+$ mongomig diff
+USERS
+  + status: string = 'active'                    REQUIRES_DATA_MIGRATION  backfill existing documents with 'active'
+  + age: int | null = None                       SAFE  defaults to None: existing documents need no backfill
+  - first_name                                   WARNING  removed from the model; existing data is kept (not deleted)
+  + given_name: string                           MANUAL_REVIEW  required, with no default: choose a value for existing documents
+  + index users_email_unique (email ↑, unique)   WARNING  fails if existing documents contain duplicates
+
+Possible rename: users.first_name → given_name (85% similar). If so, pass --rename users.first_name:given_name
+
+$ mongomig revision --autogenerate -m "evolve user schema" --rename users.first_name:given_name
+Generated b91baf4fd592 → migrations/versions/20260925_1115_b91baf4fd592_evolve_user_schema.py
 
 $ mongomig upgrade
-Running upgrade <base> -> d03be90b1aee, add user status
+Running upgrade 13a4cc638050 -> b91baf4fd592, evolve user schema
+  • rename_field users: 4,218,901 modified (4,218,901 matched, 4219 batches)
+  • backfill users: 4,218,901 modified (4,218,901 matched, 4219 batches)
   • index users.users_email_unique ready
-  backfill users: 154,000 / ~300,000 (51.3%) · 76,856 docs/s · elapsed 2.0s · ETA 1.9s
-  backfill users: 300,000 / ~300,000 (100.0%) · 69,424 docs/s · elapsed 4.3s
-  • backfill users: 300,000 modified (300,000 matched, 300 batches)
-  ✓ done in 4.8s
+  ✓ done in 8:42
 Applied 1 revision(s).
-
-$ mongomig current
-Database: app
-Current:  d03be90b1aee  add user status
-Pending:  none — up to date
 ```
 
 ## Install
 
 ```bash
-pip install --pre mongomig
+pip install --pre mongomig          # add [beanie] for Beanie support
 ```
 
 Requires Python 3.11+ and MongoDB 6.0+.
@@ -38,11 +42,32 @@ Requires Python 3.11+ and MongoDB 6.0+.
 
 ```bash
 mongomig init                                   # creates mongomig.yaml + migrations/
+# register your models in migrations/env.py (see "Registering your models")
 export MONGODB_URI="mongodb://localhost:27017"
-mongomig revision -m "initial"                  # new revision file — edit it
+
+mongomig revision --autogenerate -m "initial"   # new project: generate from your models
+# ...or, for an existing database:
+mongomig baseline                               # snapshot current models, no data changes
+
 mongomig upgrade                                # apply pending revisions
 mongomig current                                # what's applied vs pending
 ```
+
+### The workflow
+
+```text
+1. Change your models
+2. mongomig diff                                   see what changed (offline, deterministic)
+3. mongomig revision --autogenerate -m "..."       generate the migration + update the snapshot
+4. Review the file (search for TODO(review)), commit both files
+5. CI: mongomig diff --check                       fails if a model change has no migration
+6. Deploy: mongomig upgrade
+```
+
+`diff` compares your models with `migrations/schema_snapshot.json`, the committed record of what
+the models looked like at the last migration. It does **not** compare against the live
+database, so results are the same on every machine and in CI, and messy legacy data never
+changes what gets generated. Use `mongomig inspect` to look at the real data.
 
 `mongomig init` creates:
 
@@ -109,6 +134,25 @@ For anything else, `ctx.collection("users")` is a plain PyMongo collection, and
 
 Declare `reversible = False` (and optionally omit `downgrade`) when a migration can't be
 undone. `downgrade` then refuses to pass through it unless you add `--force`.
+
+### What autogenerate writes
+
+Every change is classified, and only changes that autogenerate can do *correctly* become live
+code:
+
+| Change | Classification | Generated |
+|---|---|---|
+| New optional field, or default `None` | SAFE | nothing (old documents read fine) |
+| New required field with a default | REQUIRES_DATA_MIGRATION | `backfill` with the default (downgrade: `unset_field`) |
+| Renamed field (`--rename coll.old:new`) | REQUIRES_DATA_MIGRATION | `rename_field` both ways |
+| New/removed/changed index | SAFE / WARNING | `create_index` / `drop_index` both ways |
+| Validator added/changed (`validator="auto"`) | WARNING | `set_validator` / `remove_validator` |
+| New required field, no default (or computed default) | MANUAL_REVIEW | commented `TODO(review)` backfill |
+| Unsafe type change (e.g. string → int) | MANUAL_REVIEW | commented `TODO(review)` `$convert` backfill |
+| Field or collection removed from models | WARNING | commented `unset_field` / `drop_collection`: **data is never deleted automatically** |
+
+Renames are never guessed. MongoMig suggests them ("Possible rename: first_name → given_name")
+and you confirm with `--rename`.
 
 ### Registering your models
 
@@ -218,7 +262,9 @@ handles commit hashes.
 | Command | Needs MongoDB | Description |
 |---|---|---|
 | `init` | no | Create config and migrations directory |
-| `revision -m MSG [--head REV]` | no | Create a new revision |
+| `diff [--check] [--rename C.OLD:NEW]` | no | Model changes since the last migration; `--check` exits 1 if any |
+| `revision -m MSG [--autogenerate] [--rename C.OLD:NEW] [--head REV]` | no | Create a revision: empty, or generated from model changes |
+| `baseline [-m MSG]` | no | Adopt MongoMig on an existing database: snapshot the models, no data changes |
 | `heads` | no | Show head revision(s) |
 | `history` | no | List revisions, newest first |
 | `merge [REVS...] [-m MSG]` | no | Join several heads into one |
@@ -273,7 +319,7 @@ available synchronously: `mongomig.upgrade()`, `mongomig.downgrade()`, `mongomig
 - [x] **M1 Foundation**: config, CLI, revision files, revision graph, tracking
 - [x] **M2 Migration engine**: `upgrade`, `downgrade`, locking, `merge`, checksums, FastAPI lifespan helper
 - [x] **M3 Schema engine**: `@collection` models, Beanie support, `inspect`, snapshots
-- [ ] **M4 Autogenerate**: `diff`, `revision --autogenerate`, index/validator diff
+- [x] **M4 Autogenerate**: `diff`, `revision --autogenerate`, index/validator diff
 - [ ] **M5 Production safety**: `--dry-run`, `plan`, impact analysis, backups for destructive ops
 - [ ] **M6 Release**: `validate`, `doctor`, docs, PyPI
 

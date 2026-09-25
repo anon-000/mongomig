@@ -6,7 +6,22 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+## [0.1.0a1] — 2026-09-25
+
+First alpha: the full models → diff → autogenerate → upgrade workflow.
+
 ### Added
+- Diff engine (Milestone 4): models vs `schema_snapshot.json`, covering collections, fields
+  (nested objects and arrays), types (int/long as one family), nullability,
+  required/optional, enums, indexes and validators. Every change is classified as SAFE,
+  WARNING, REQUIRES_DATA_MIGRATION, MANUAL_REVIEW or DESTRUCTIVE.
+- Rename hints (similarity-based) and explicit `--rename COLLECTION.OLD:NEW`.
+- `mongomig revision --autogenerate`: generates `ctx.ops` code (backfills with model
+  defaults, renames, indexes, validators) and rewrites the snapshot. Risky or ambiguous changes
+  are emitted as commented `TODO(review)` blocks; data is never deleted automatically.
+- `mongomig diff [--check]` for local review and CI.
+- `mongomig baseline` to adopt MongoMig on an existing database.
+- Warnings when the snapshot was edited after the head revision, or the storage profile changed.
 - Schema engine (Milestone 3): `MongoMetadata` registry, `@collection` decorator,
   `Index`, explicit `register()`, and `register_beanie()` (reads Beanie `Settings`,
   `Indexed(...)`, `keep_nulls`, `use_revision`).
