@@ -38,6 +38,21 @@ async def lifespan(app):
 `upgrade_to_head()` is the sync version. Both accept `config`, `env`, `lock_timeout`,
 `reporter`, `yes`.
 
+### Drift
+
+```python
+from mongomig import check_drift
+
+for collection in check_drift():                 # all registered collections
+    for finding in collection.failed:             # over the configured thresholds
+        print(collection.name, finding.path, finding.summary)
+```
+
+`check_drift(collections=None, *, config=None, env=None, sample_size=None, full_scan=False)`
+returns one `CollectionDrift` per collection (`.findings`, `.failed`, `.documents_scanned`,
+`.complete`). Each `DriftFinding` has `kind`, `path`, `status` (`"fail"`/`"warn"`),
+`summary`, `share` (0–1), `threshold` and `hint`.
+
 ### Errors
 
 All errors derive from `mongomig.MongoMigError` and carry `.message`, `.suggestion`,

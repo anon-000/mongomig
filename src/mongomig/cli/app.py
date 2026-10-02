@@ -345,6 +345,46 @@ def inspect(
 
 
 @app.command()
+def drift(
+    ctx: typer.Context,
+    collections: Annotated[
+        list[str] | None,
+        typer.Argument(help="Registered collections to check (default: all)."),
+    ] = None,
+    sample_size: Annotated[
+        int | None,
+        typer.Option("--sample-size", min=1, help="Random sample size (default from config)."),
+    ] = None,
+    sample_percent: Annotated[
+        float | None,
+        typer.Option("--sample-percent", min=0.001, max=100, help="Sample this % of documents."),
+    ] = None,
+    full_scan: Annotated[
+        bool, typer.Option("--full-scan", help="Read every document (slow on big collections).")
+    ] = False,
+    check: Annotated[
+        bool, typer.Option("--check", help="Exit with code 1 if any finding is over threshold.")
+    ] = False,
+    strict: Annotated[
+        bool, typer.Option("--strict", help="Zero tolerance: every finding fails.")
+    ] = False,
+    json_: JsonOpt = False,
+) -> None:
+    """Compare your models with the data actually stored (sampled); report drift."""
+    _run(
+        ctx,
+        "drift",
+        json_=json_,
+        collections=collections or [],
+        sample_size=sample_size,
+        sample_percent=sample_percent,
+        full_scan=full_scan,
+        check=check,
+        strict=strict,
+    )
+
+
+@app.command()
 def models(ctx: typer.Context, json_: JsonOpt = False) -> None:
     """Show the schema your registered models declare (as MongoMig maps them to BSON)."""
     _run(ctx, "models", json_=json_)

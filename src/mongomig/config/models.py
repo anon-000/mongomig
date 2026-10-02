@@ -50,11 +50,24 @@ class SamplingConfig(_Section):
     size: PositiveInt = 10000
 
 
+class DriftThresholds(_Section):
+    """Percentages of sampled documents (or values) above which `drift` reports a failure."""
+
+    missing_field_percent: float = Field(default=0.5, ge=0, le=100)
+    unexpected_type_percent: float = Field(default=0.5, ge=0, le=100)
+    unexpected_field_percent: float = Field(default=1.0, ge=0, le=100)
+
+
+class DriftConfig(_Section):
+    thresholds: DriftThresholds = DriftThresholds()
+
+
 class MongoMigConfig(_Section):
     database: DatabaseConfig
     migrations: MigrationsConfig = MigrationsConfig()
     execution: ExecutionConfig = ExecutionConfig()
     sampling: SamplingConfig = SamplingConfig()
+    drift: DriftConfig = DriftConfig()
 
 
 class LoadedConfig(BaseModel):

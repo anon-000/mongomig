@@ -26,3 +26,11 @@ execution:
 
 sampling:
   size: 10000
+
+# `mongomig drift` compares models with sampled data. A finding fails when it affects more
+# than this percentage of sampled documents (or values).
+drift:
+  thresholds:
+    missing_field_percent: 0.5
+    unexpected_type_percent: 0.5
+    unexpected_field_percent: 1

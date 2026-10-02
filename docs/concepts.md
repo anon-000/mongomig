@@ -9,11 +9,13 @@ keeps three views apart and never treats an inferred schema as truth:
 |---|---|---|
 | **Declared** | your models (via `migrations/env.py`) | what the code expects now |
 | **Snapshot** | `migrations/schema_snapshot.json` | what the code expected at the last migration |
-| **Observed** | sampled documents (`mongomig inspect`) | what is actually stored |
+| **Observed** | sampled documents (`mongomig inspect`, `mongomig drift`) | what is actually stored |
 
 `diff` and `revision --autogenerate` compare **declared vs snapshot**. This is deterministic
 (same result on every machine, offline, in CI) and messy legacy data never changes what gets
-generated. The live database is consulted only by `inspect`, `plan` and `--dry-run`.
+generated. The live database is consulted only by `inspect`, `drift`, `plan` and `--dry-run`.
+`drift` is the bridge: it compares **declared vs observed** and reports where the data doesn't
+match the models.
 
 ## The snapshot
 

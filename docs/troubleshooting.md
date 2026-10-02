@@ -20,3 +20,6 @@ Start with `mongomig doctor`. It checks config, connection, permissions, lock an
 | `Decimal needs bson.Decimal128 or a codec` (warning) | `storage="python"` with a type PyMongo can't encode | convert before inserting, use Beanie / `storage="json"`, or `type_overrides` |
 | `database has revisions with no file here` | database migrated by newer code | deploy the newer code; don't downgrade blindly |
 | `not fully simulated: the migration uses ctx.unsafe_db` (plan) | raw database access | expected; the impact of that part isn't estimated |
+| drift: `expected date · observed string 98%` | the app stores dates as strings | `storage="json"` in env.py if that's how you write documents; otherwise convert them |
+| drift: `required by the model · missing in N%` | documents written before the field existed, or by another service | backfill in a migration; or make the field optional in the model |
+| drift: `migration(s) pending` warning | the database is behind the code | `mongomig upgrade`, then re-run drift |
