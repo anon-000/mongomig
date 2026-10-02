@@ -83,5 +83,6 @@ mean diverged history: `revision` and `upgrade` refuse until you pick `--head` o
 
 `__mongomig_migrations` holds one document per revision: status (`applied`, `failed`,
 `running` = interrupted), checksum of the file, timing, and who ran it where (host, user,
-environment, git commit). `__mongomig_lock` holds the migration lock. Backups live in
-`__mongomig_backup_*` collections.
+environment, git commit). `__mongomig_lock` holds the migration lock,
+`__mongomig_checkpoints` the progress of interrupted migrations (so they resume), and backups
+live in `__mongomig_backup_*` collections.

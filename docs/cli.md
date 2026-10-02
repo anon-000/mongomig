@@ -34,6 +34,7 @@ mongomig [--config PATH] [--env NAME] [--json] [--verbose] [--version] COMMAND .
 | `plan [TARGET] [--steps N]` | pending migrations with estimated impact and risk; writes nothing |
 | `upgrade [TARGET] [--steps N] [--dry-run] [--yes] [--lock-timeout S]` | apply; `TARGET` = `head` (default), `heads`, or a revision |
 | `downgrade [TARGET] [--steps N] [--dry-run] [--yes] [--force] [--lock-timeout S]` | revert one step (default), back to `TARGET` (kept applied), or `base` |
+| `resume [--yes] [--lock-timeout S]` | continue failed/interrupted migrations from their checkpoints (then the rest, like `upgrade`) |
 | `stamp REV ... \| heads \| base` | mark as applied without running (baselines, checksum repair) |
 | `inspect [COLL ...] [--sample-size N \| --sample-percent P \| --full-scan]` | observed schema: fields, types, presence, indexes, validator |
 | `drift [COLL ...] [--check] [--strict] [--sample-size N \| --sample-percent P \| --full-scan]` | models vs stored data: missing fields, unexpected types/fields, index and validator drift; `--check` exits 1 over thresholds |
@@ -65,6 +66,7 @@ migrations:
   directory: migrations
   tracking_collection: __mongomig_migrations
   lock_collection: __mongomig_lock
+  checkpoint_collection: __mongomig_checkpoints
 execution:
   confirm: destructive               # destructive | always | never
   batch_size: 1000

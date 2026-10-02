@@ -93,7 +93,8 @@ ctx = MigrationContext(MongoClient()["app"], batch_size=500, revision="manual")
 ctx.ops.create_index("users", "email", unique=True)
 ```
 
-Useful for tests of migration logic and one-off scripts. See
+`ctx.transaction()` and `ctx.batches(...)` work here too (without checkpoints: a standalone
+context doesn't resume). Useful for tests of migration logic and one-off scripts. See
 [Writing migrations](writing-migrations.md) for `ctx.ops`.
 
 ## Progress reporting

@@ -81,6 +81,10 @@ class MigrationExecutionError(ExecutionError):
     """A migration's upgrade()/downgrade() raised."""
 
 
+class TransactionsUnsupportedError(ExecutionError):
+    """``ctx.transaction()`` / ``transactional=True`` on a standalone server."""
+
+
 class IrreversibleMigrationError(ExecutionError):
     """A downgrade would pass through a migration declared ``reversible = False``."""
 

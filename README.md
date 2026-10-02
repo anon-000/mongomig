@@ -45,9 +45,10 @@ $ mongomig upgrade
   sampled database, so results are the same on every machine and in CI.
 - **Knows how you store data**: `model_dump()` vs `jsonable_encoder` stores dates as different
   BSON types, and MongoMig warns about types PyMongo can't store.
-- **Production-grade execution**: distributed lock, idempotent batched operations with
-  progress and ETA, retries, failure tracking, checksums, confirmation before destructive
-  migrations, and restorable backups.
+- **Production-grade execution**: distributed lock, batched operations with progress and
+  ETA, retries, **checkpoints so a failed migration resumes where it stopped**
+  (`mongomig resume`), transactions, checksums, confirmation before destructive migrations,
+  and restorable backups.
 - **See the impact first**: `plan` / `--dry-run` estimate documents touched and collection
   scans, and predict unique-index failures and validator rejections against real data.
 - **Catch drift**: `mongomig drift` compares your models with the data actually stored. It
@@ -125,8 +126,8 @@ Examples: [FastAPI + Pydantic](https://github.com/anon-000/mongomig/tree/main/ex
 ## Status
 
 The MVP is complete (config, revisions, upgrade/downgrade, schema inspection, diff,
-autogenerate, plan/dry-run, locking, batching, backups, CI checks), plus drift detection.
-Planned next: resumable checkpoints, transaction helpers, migration squashing.
+autogenerate, plan/dry-run, locking, batching, backups, CI checks), plus drift detection,
+resumable migrations and transactions. Planned next: migration squashing.
 
 ## Development
 

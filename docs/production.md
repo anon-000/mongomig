@@ -98,14 +98,26 @@ runner's lock expires by itself; `mongomig doctor` shows who holds it.
 The error names the revision, operation, collection and documents processed so far; the
 tracking record is marked `failed` (`mongomig current` shows it).
 
-1. Fix the cause (data or migration code; the migration hasn't been applied, so editing it is
-   fine).
-2. Run `mongomig upgrade` again. `ctx.ops` operations are idempotent: completed batches aren't
-   redone.
+1. Fix the cause (usually data; see below before editing the migration).
+2. Run `mongomig resume` (same as `upgrade`, but only when something failed).
 
-A process killed mid-run leaves status `running`; it's treated the same way. Transactions are
-not used automatically: a failure mid-migration leaves earlier batches applied, which is why
-migrations should be re-runnable.
+`mongomig current` shows where each interrupted loop will resume:
+
+```text
+Failed:   9a1f3c2e7b10: crash in batch 3
+          resumes from checkpoint: users (1,240,000 documents done)
+```
+
+Every batched `ctx.ops` operation and every `ctx.batches` loop **checkpoints after each
+batch** in `__mongomig_checkpoints`. A re-run skips completed operations and continues each
+loop after its last completed batch, even for non-idempotent updates such as `$inc`. The
+batch that was in flight when it failed is processed again, unless the loop uses
+`transactional=True` (exactly-once). A process killed mid-run (status `running`) resumes the
+same way.
+
+Checkpoints are only trusted when the migration file is unchanged. If you edit a failed
+migration, its checkpoints are discarded and it starts over. They are deleted once the
+migration succeeds.
 
 ## Rolling back
 

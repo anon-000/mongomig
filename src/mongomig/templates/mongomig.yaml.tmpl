@@ -14,6 +14,7 @@ migrations:
   directory: {{migrations_dir}}
   tracking_collection: __mongomig_migrations
   lock_collection: __mongomig_lock
+  checkpoint_collection: __mongomig_checkpoints
 
 execution:
   # Ask before running migrations: destructive (default) | always | never.

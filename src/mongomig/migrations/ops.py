@@ -23,7 +23,7 @@ These are what ``revision --autogenerate`` emits. For anything else, use
 from __future__ import annotations
 
 import time
-from collections.abc import Callable, Iterator, Mapping, Sequence
+from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass
 from functools import partial
 from typing import TYPE_CHECKING, Any, TypeVar
@@ -424,49 +424,97 @@ class Operations:
         update_doc: Any = (
             dict(update) if isinstance(update, Mapping) else [dict(stage) for stage in update]
         )
+        key = self.ctx.next_checkpoint_key(operation, collection)
         if self.ctx.recorder is not None:
-            from mongomig.migrations.dryrun import update_summary
-            from mongomig.safety.impact import uses_collection_scan
-
-            detail = update_summary(update_doc)
-            if before_batch is not None:
-                detail += f" (backup → {self._backup_name()})"
-            self.ctx.recorder.record(
-                RecordedOp(
-                    collection,
-                    operation,
-                    detail,
-                    estimated_docs=self._estimate(coll, query),
-                    collection_scan=uses_collection_scan(coll, query),
-                    destructive=destructive,
-                )
+            self._record_batched_update(
+                coll, operation, query, update_doc, destructive, backup=before_batch is not None
             )
             return BatchResult(matched=0, modified=0, batches=0)
+        from mongomig.migrations.batching import START, id_ordered_batches
+        from mongomig.migrations.checkpoints import Checkpoint, fingerprint
+
         task = f"{operation} {collection}"
         sleep_s = self.ctx.sleep_ms_between_batches / 1000
+        store = self.ctx.checkpoints
+        fp = fingerprint(operation, collection, query, update_doc)
+        cp = store.load(key, fp) if store is not None else None
+        if cp is not None and cp.done:
+            self.ctx.log(f"{task}: already completed in an earlier run, skipping")
+            return BatchResult(matched=cp.matched, modified=cp.modified, batches=cp.batches)
+        if cp is None:
+            cp = Checkpoint(key=key, collection=collection, fingerprint=fp)
+        elif cp.processed:
+            self.ctx.log(f"{task}: resuming after {cp.processed:,} documents (checkpoint)")
 
         with self._op(operation, collection) as state:
+            state.processed, state.batch = cp.processed, cp.batches
             total = self._estimate(coll, query)
-            self.ctx.reporter.progress(task, 0, total)
-            matched = modified = 0
-            for ids in self._id_batches(coll, query, size):
+            if total is not None:
+                total += cp.processed  # remaining + already done
+            self.ctx.reporter.progress(task, cp.processed, total)
+            for docs in id_ordered_batches(
+                coll,
+                query,
+                size,
+                projection={"_id": 1},
+                start_after=cp.last_id if cp.has_position else START,
+                max_retries=self.ctx.max_retries,
+                is_transient=_is_transient,
+                on_retry=self._backoff,
+            ):
                 self.ctx.check_lock()
+                ids = [d["_id"] for d in docs]
                 if before_batch is not None:
                     before_batch(ids)
                 batch_query = {"$and": [query, {"_id": {"$in": ids}}]}
                 result = self._retry(partial(coll.update_many, batch_query, update_doc))
-                matched += result.matched_count
-                modified += result.modified_count
-                state.batch += 1
-                state.processed += len(ids)
-                self.ctx.reporter.progress(task, state.processed, total)
+                cp.matched += result.matched_count
+                cp.modified += result.modified_count
+                cp.batches += 1
+                cp.processed += len(ids)
+                cp.last_id, cp.has_position = ids[-1], True
+                if store is not None:
+                    store.save(cp)
+                state.batch, state.processed = cp.batches, cp.processed
+                self.ctx.reporter.progress(task, cp.processed, total)
                 if sleep_s:
                     time.sleep(sleep_s)
+            cp.done = True
+            if store is not None:
+                store.save(cp)
             self.ctx.reporter.progress_done(task)
             self.ctx.log(
-                f"{task}: {modified:,} modified ({matched:,} matched, {state.batch} batches)"
+                f"{task}: {cp.modified:,} modified ({cp.matched:,} matched, {cp.batches} batches)"
             )
-            return BatchResult(matched=matched, modified=modified, batches=state.batch)
+            return BatchResult(matched=cp.matched, modified=cp.modified, batches=cp.batches)
+
+    def _record_batched_update(
+        self,
+        coll: Collection[dict[str, Any]],
+        operation: str,
+        query: dict[str, Any],
+        update_doc: Any,
+        destructive: bool,
+        *,
+        backup: bool,
+    ) -> None:
+        from mongomig.migrations.dryrun import update_summary
+        from mongomig.safety.impact import uses_collection_scan
+
+        assert self.ctx.recorder is not None
+        detail = update_summary(update_doc)
+        if backup:
+            detail += f" (backup → {self._backup_name()})"
+        self.ctx.recorder.record(
+            RecordedOp(
+                coll.name,
+                operation,
+                detail,
+                estimated_docs=self._estimate(coll, query),
+                collection_scan=uses_collection_scan(coll, query),
+                destructive=destructive,
+            )
+        )
 
     def _estimate(self, coll: Collection[dict[str, Any]], query: dict[str, Any]) -> int | None:
         """Best-effort document count for progress; ``None`` if it would be too slow."""
@@ -476,42 +524,6 @@ class Operations:
             return coll.count_documents(query, maxTimeMS=5000)
         except PyMongoError:
             return None
-
-    def _id_batches(
-        self, coll: Collection[dict[str, Any]], query: dict[str, Any], size: int
-    ) -> Iterator[list[Any]]:
-        """Yield lists of ``_id`` values matching ``query`` in ascending ``_id`` order.
-
-        A single cursor is used (so mixed ``_id`` types are all visited); if it dies from a
-        transient error it is reopened after the last ``_id`` seen.
-        """
-        last_id: Any = None
-        started = False
-        attempts = 0
-        while True:
-            q = query if not started else {"$and": [query, {"_id": {"$gt": last_id}}]}
-            cursor = coll.find(q, {"_id": 1}, sort=[("_id", 1)], batch_size=size)
-            batch: list[Any] = []
-            try:
-                for doc in cursor:
-                    batch.append(doc["_id"])
-                    if len(batch) >= size:
-                        last_id, started, attempts = batch[-1], True, 0
-                        yield batch
-                        batch = []
-                if batch:
-                    yield batch
-                return
-            except Exception as exc:
-                attempts += 1
-                if not _is_transient(exc) or attempts > self.ctx.max_retries:
-                    raise
-                if batch:
-                    last_id, started = batch[-1], True
-                    yield batch
-                self._backoff(attempts, exc)
-            finally:
-                cursor.close()
 
     def _retry(self, fn: Callable[[], T]) -> T:
         attempts = 0
