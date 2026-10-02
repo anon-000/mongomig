@@ -6,6 +6,23 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+## [0.2.0] — 2026-10-03
+
+### Added
+- `mongomig drift`: compares the registered models with sampled documents (PRD §30/§66) and
+  reports:
+  - missing required fields, unexpected types (with storage-profile hints) and fields that
+    aren't in the model, including nested objects and arrays;
+  - declared indexes that are missing or different (text-index and collation defaults are
+    understood), undeclared indexes, managed validators that are missing or changed, and
+    registered collections that don't exist.
+
+  Data findings fail above `drift.thresholds` in `mongomig.yaml`. `--check` exits 1 for CI and
+  scheduled jobs, and `--strict` gives zero tolerance. Sampling options match `inspect`, and
+  a warning appears when migrations are still pending.
+- Python API: `mongomig.check_drift()`.
+- Docs: "Monitoring drift" in the production guide; CLI, API and troubleshooting updates.
+
 ## [0.1.1] — 2026-09-25
 
 ### Fixed

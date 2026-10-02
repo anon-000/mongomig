@@ -81,7 +81,7 @@ Use it once, when your models already describe the data; afterwards use autogene
 ## Limitations
 
 - The snapshot describes the *models*; data that never matched them (legacy documents) is not
-  fixed by autogenerate. Use `mongomig inspect` to find it and write a migration by hand.
+  fixed by autogenerate. `mongomig drift` finds it; write a migration by hand to fix it.
 - Collection renames are not detected; write `ctx.ops.rename_collection` yourself.
 - Changing the storage profile makes many fields look changed (dates become strings, ...);
   `diff` warns when it happens.

@@ -36,6 +36,7 @@ mongomig [--config PATH] [--env NAME] [--json] [--verbose] [--version] COMMAND .
 | `downgrade [TARGET] [--steps N] [--dry-run] [--yes] [--force] [--lock-timeout S]` | revert one step (default), back to `TARGET` (kept applied), or `base` |
 | `stamp REV ... \| heads \| base` | mark as applied without running (baselines, checksum repair) |
 | `inspect [COLL ...] [--sample-size N \| --sample-percent P \| --full-scan]` | observed schema: fields, types, presence, indexes, validator |
+| `drift [COLL ...] [--check] [--strict] [--sample-size N \| --sample-percent P \| --full-scan]` | models vs stored data: missing fields, unexpected types/fields, index and validator drift; `--check` exits 1 over thresholds |
 | `backups [--drop REV\|NAME ...] [--yes]` | list / drop `backup=True` copies |
 | `doctor` | environment diagnostics: versions, config, connection, server, permissions, lock, backups |
 
@@ -46,7 +47,7 @@ Revisions can be given as full ids, unique prefixes (4+ characters) or branch la
 | Code | Meaning |
 |---|---|
 | 0 | success |
-| 1 | validation failure: `diff --check`, `validate`, `current --check`, unknown revision, confirmation required |
+| 1 | validation failure: `diff --check`, `validate`, `current --check`, `drift --check`, unknown revision, confirmation required |
 | 2 | execution failure: a migration raised, connection failed, irreversible downgrade refused |
 | 3 | configuration error |
 | 4 | revision conflict: multiple heads, cycle, missing parent, duplicate id |
@@ -71,7 +72,12 @@ execution:
   max_retries: 3
   lock_ttl_seconds: 300
 sampling:
-  size: 10000                        # default for `inspect`
+  size: 10000                        # default sample for `inspect` and `drift`
+drift:
+  thresholds:                        # % of sampled documents/values before a finding fails
+    missing_field_percent: 0.5
+    unexpected_type_percent: 0.5
+    unexpected_field_percent: 1
 ```
 
 Unknown keys are rejected. Environment overlays (`mongomig.<env>.yaml`) are deep-merged.

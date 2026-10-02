@@ -50,6 +50,9 @@ $ mongomig upgrade
   migrations, and restorable backups.
 - **See the impact first**: `plan` / `--dry-run` estimate documents touched and collection
   scans, and predict unique-index failures and validator rejections against real data.
+- **Catch drift**: `mongomig drift` compares your models with the data actually stored. It
+  reports missing fields, unexpected types (`age: string in 5.7% of documents`), unknown fields,
+  and missing indexes or validators, with thresholds for CI or scheduled checks.
 - **Built for CI**: `mongomig validate`, `--json` output everywhere, documented exit codes.
 
 ## Install
@@ -94,6 +97,16 @@ target_metadata = MongoMetadata.default(storage="python")   # or "json"; Beanie:
 
 **Everyday loop:** edit models → `mongomig diff` → `mongomig revision --autogenerate -m "..."` →
 review and commit → CI `mongomig validate` → deploy `mongomig plan` + `mongomig upgrade`.
+On a schedule: `mongomig drift --check`.
+
+```console
+$ mongomig drift
+USERS  10,000 sampled of ~4,982,133 documents
+  ✗ (index)           index users_email_unique (email ↑, unique) is not in the database
+  ✗ age               expected int | null · observed string 5.70%  > 0.5%
+  ✗ profile.verified  required by the model · missing in 10.1% of documents  > 0.5%
+  ! nickname          not in the model · present in 0.36% of documents  ≤ 1%
+```
 
 ## Documentation
 
@@ -112,9 +125,8 @@ Examples: [FastAPI + Pydantic](https://github.com/anon-000/mongomig/tree/main/ex
 ## Status
 
 The MVP is complete (config, revisions, upgrade/downgrade, schema inspection, diff,
-autogenerate, plan/dry-run, locking, batching, backups, CI checks). Planned next: drift
-detection (models vs live data), resumable checkpoints, transaction helpers, migration
-squashing.
+autogenerate, plan/dry-run, locking, batching, backups, CI checks), plus drift detection.
+Planned next: resumable checkpoints, transaction helpers, migration squashing.
 
 ## Development
 

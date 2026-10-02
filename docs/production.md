@@ -125,6 +125,45 @@ Editing an applied revision makes `upgrade` stop (exit 6). Revert the edit. If i
 given revisions (and their ancestors) as applied without running anything; `stamp base`
 clears tracking.
 
+## Monitoring drift
+
+Migrations keep the *shape* in sync, but data can still drift away from the models. Typical
+causes are legacy documents, other services writing to the same collections, manual fixes,
+and migrations that never ran in one environment. `mongomig drift` samples each registered
+collection and reports:
+
+- **missing fields**: required by the model, absent from N% of documents;
+- **unexpected types**: e.g. `age` stored as a string in 5.7% of documents (with a hint when
+  the cause is probably the storage profile);
+- **unexpected fields**: present in the data, not in the model;
+- **structural drift**: declared indexes or a managed validator missing or different, or
+  a registered collection that doesn't exist.
+
+Data findings fail above `drift.thresholds` (percent of sampled documents or values). The
+other findings are reported but below threshold. Structural findings always fail, except
+undeclared indexes, which are a warning.
+
+```yaml
+# mongomig.production.yaml
+drift:
+  thresholds:
+    missing_field_percent: 0.5
+    unexpected_type_percent: 0.5
+    unexpected_field_percent: 1
+```
+
+Run it on a schedule (cron, a Kubernetes CronJob, or a CI job against staging) and alert on the
+exit code:
+
+```bash
+mongomig --env production drift --check            # exit 1 if anything is over threshold
+mongomig --env production drift --check --json     # machine-readable findings
+```
+
+Results are based on samples (`sampling.size`, `--sample-size`, `--sample-percent`); use
+`--full-scan` for an exact answer on smaller collections. `--strict` fails on any finding.
+`drift` only reads: it needs the `read` role.
+
 ## Sharded clusters
 
 `plan` flags operations on sharded collections: broad updates fan out to every shard. Changes

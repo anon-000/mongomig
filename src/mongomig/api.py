@@ -18,9 +18,13 @@ from __future__ import annotations
 
 import asyncio
 from pathlib import Path
+from typing import TYPE_CHECKING
 
 from mongomig.migrations.executor import RunResult
 from mongomig.migrations.reporting import LoggingReporter, Reporter
+
+if TYPE_CHECKING:
+    from mongomig.schema.drift import CollectionDrift
 
 DEFAULT_LOCK_TIMEOUT_S = 120.0
 
@@ -123,3 +127,37 @@ async def aupgrade_to_head(
         reporter=reporter,
         yes=yes,
     )
+
+
+def check_drift(
+    collections: list[str] | None = None,
+    *,
+    config: str | Path | None = None,
+    env: str | None = None,
+    sample_size: int | None = None,
+    full_scan: bool = False,
+) -> list[CollectionDrift]:
+    """Compare the registered models with sampled data (like ``mongomig drift``).
+
+    Returns one ``CollectionDrift`` per collection; ``.failed`` lists findings over the
+    thresholds configured under ``drift.thresholds``.
+    """
+    from mongomig.cli.commands._schema import require_metadata
+    from mongomig.config.loader import load_config
+    from mongomig.database.client import open_database
+    from mongomig.schema.drift import Thresholds, check_collections
+
+    loaded = load_config(Path(config) if config else None, environment=env)
+    declared, _ = require_metadata(loaded).schemas()
+    t = loaded.settings.drift.thresholds
+    with open_database(loaded) as db:
+        return check_collections(
+            db,
+            declared,
+            Thresholds(
+                t.missing_field_percent, t.unexpected_type_percent, t.unexpected_field_percent
+            ),
+            only=collections,
+            sample_size=sample_size or loaded.settings.sampling.size,
+            full_scan=full_scan,
+        )
