@@ -98,5 +98,7 @@ mongomig plan                                   # impact against real data
 mongomig upgrade
 ```
 
-In CI, `mongomig validate` fails the build if a model change has no migration. See
-[Production guide](production.md) for deploying.
+In CI, `mongomig validate` fails the build if a model change has no migration. On a
+schedule, `mongomig drift --check` tells you when stored data stops matching the models. See
+the [Production guide](production.md) for deploying, recovering from failures and squashing
+old revisions.

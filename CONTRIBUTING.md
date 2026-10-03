@@ -53,12 +53,16 @@ These guide reviews. Please keep them intact:
 
 ```text
 src/mongomig/
+├── api.py          Python API: upgrade(), downgrade(), upgrade_to_head(), check_drift()
 ├── cli/            Typer app (app.py) and one module per command (commands/)
 ├── config/         mongomig.yaml loading, env.py loading
 ├── database/       PyMongo client creation, credential redaction
 ├── metadata/       MongoMetadata registry, @collection, Beanie adapter, Pydantic → BSON mapping
-├── schema/         CollectionSchema model, inference, snapshot, diff engine
+├── schema/         CollectionSchema model, inference, snapshot, diff engine, drift
 ├── generators/     diff → migration code
-├── migrations/     revision files, graph, tracker, lock, executor, ctx / ctx.ops, dry run
-└── safety/         impact analysis, risk, permissions
+├── migrations/     revision files and graph (incl. squash aliases), tracker, lock, executor,
+│                   ctx / ctx.ops, batching and checkpoints (resume), dry run, squash
+├── safety/         impact analysis, risk, permissions
+├── output/         console/JSON output, schema rendering
+└── templates/      files written by `init` and `revision`
 ```
