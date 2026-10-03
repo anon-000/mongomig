@@ -22,6 +22,16 @@ jobs:
       - run: .venv/bin/ruff format --check src tests
       - run: .venv/bin/mypy
 
+  docs:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: astral-sh/setup-uv@v10.2.0
+        with:
+          python-version: "3.12"
+      - run: uv venv && uv pip install -r pyproject.toml --extra docs
+      - run: .venv/bin/mkdocs build --strict  # fails on broken links/anchors
+
   unit:
     runs-on: ubuntu-latest
     strategy:

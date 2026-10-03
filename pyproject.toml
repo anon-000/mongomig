@@ -44,12 +44,15 @@ dev = [
     "types-PyYAML>=6.0",
 ]
 
+# mkdocs<2: MkDocs 2.0 drops the plugin/theme system Material for MkDocs relies on.
+docs = ["mkdocs>=1.6,<2", "mkdocs-material>=9.5,<10"]
+
 [project.scripts]
 mongomig = "mongomig.cli.app:main"
 
 [project.urls]
 Homepage = "https://github.com/anon-000/mongomig"
-Documentation = "https://github.com/anon-000/mongomig/tree/main/docs"
+Documentation = "https://anon-000.github.io/mongomig/"
 Changelog = "https://github.com/anon-000/mongomig/blob/main/CHANGELOG.md"
 Issues = "https://github.com/anon-000/mongomig/issues"
 Source = "https://github.com/anon-000/mongomig"

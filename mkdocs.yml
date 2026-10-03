@@ -1,0 +1,74 @@
+site_name: MongoMig
+site_description: Alembic-style schema evolution and migrations for MongoDB.
+site_url: https://anon-000.github.io/mongomig/
+repo_url: https://github.com/anon-000/mongomig
+repo_name: anon-000/mongomig
+edit_uri: edit/main/docs/
+copyright: MongoMig is MIT licensed
+
+# docs/README.md is the index when browsing docs/ on GitHub; the site uses index.md.
+exclude_docs: |
+  README.md
+
+theme:
+  name: material
+  icon:
+    repo: fontawesome/brands/github
+  features:
+    - navigation.sections
+    - navigation.top
+    - navigation.footer
+    - navigation.instant
+    - search.suggest
+    - search.highlight
+    - content.code.copy
+    - content.action.edit
+    - toc.follow
+  palette:
+    - media: "(prefers-color-scheme: light)"
+      scheme: default
+      primary: green
+      accent: green
+      toggle:
+        icon: material/weather-night
+        name: Switch to dark mode
+    - media: "(prefers-color-scheme: dark)"
+      scheme: slate
+      primary: green
+      accent: green
+      toggle:
+        icon: material/weather-sunny
+        name: Switch to light mode
+
+nav:
+  - Home: index.md
+  - Getting started: getting-started.md
+  - Coming from Alembic or scripts: comparison.md
+  - Guides:
+      - Concepts: concepts.md
+      - Writing migrations: writing-migrations.md
+      - Autogenerate: autogenerate.md
+      - Production guide: production.md
+  - Reference:
+      - CLI: cli.md
+      - Python API: python-api.md
+      - Troubleshooting: troubleshooting.md
+
+markdown_extensions:
+  - admonition
+  - attr_list
+  - tables
+  - toc:
+      permalink: true
+  - pymdownx.highlight:
+      anchor_linenums: true
+  - pymdownx.inlinehilite
+  - pymdownx.superfences
+  - pymdownx.details
+
+# `mkdocs build --strict` (CI) turns these into errors: no broken links or anchors ship.
+validation:
+  omitted_files: warn
+  absolute_links: info
+  unrecognized_links: warn
+  anchors: warn

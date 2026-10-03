@@ -1,4 +1,4 @@
-.PHONY: install lint format typecheck test test-unit test-integration check mongo-up mongo-down
+.PHONY: install lint format typecheck test test-unit test-integration check mongo-up mongo-down docs docs-build
 
 install:          ## Create .venv and install mongomig with dev extras (needs uv)
 	uv venv --python 3.12 .venv
@@ -31,3 +31,11 @@ mongo-up:
 
 mongo-down:
 	docker compose down -v
+
+docs:             ## Live-reloading docs preview at http://127.0.0.1:8000
+	uv pip install -q -r pyproject.toml --extra docs
+	.venv/bin/mkdocs serve
+
+docs-build:       ## Build the docs site into site/, failing on broken links
+	uv pip install -q -r pyproject.toml --extra docs
+	.venv/bin/mkdocs build --strict
