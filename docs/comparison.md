@@ -13,6 +13,8 @@ MongoMig deliberately feels like Alembic. Most concepts map one to one:
 | `op.add_column`, `op.create_index`, ... | `ctx.ops.backfill`, `ctx.ops.create_index`, ... | `ctx.collection(name)` for plain PyMongo |
 | `upgrade head`, `downgrade -1` | `upgrade`, `downgrade` (one step) or `downgrade --steps N` | |
 | `heads`, `history`, `current`, `merge`, `stamp` | same | |
+| `alembic check` | `mongomig diff --check` (or `validate`) | fails CI when models changed without a migration |
+| (no built-in squash) | `mongomig squash` | existing databases adopt the squash automatically |
 | `alembic_version` table | `__mongomig_migrations` collection | also stores status, checksum, who/where/commit |
 | `--sql` (offline mode) | `plan` / `--dry-run` | recorded against live data, with document estimates and risk |
 
@@ -46,6 +48,8 @@ Many MongoDB projects evolve their schema with ad-hoc scripts (`scripts/fix_user
 | "how many documents will this touch?" | `mongomig plan`: estimates, collection scans, index-build failures |
 | rollback is another ad-hoc script | `downgrade`, generated alongside `upgrade`; backups for deletions |
 | indexes created by the app at startup | indexes versioned in migrations, created once, reviewed |
+| "does production data still match the code?" | `mongomig drift --check` on a schedule |
+| a long list of scripts every new environment replays | `mongomig squash` |
 
 Adopting MongoMig on an existing database takes three commands: `mongomig init`, register
 your models in `env.py`, then `mongomig baseline`. Nothing in the database changes. Future

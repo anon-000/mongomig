@@ -16,7 +16,7 @@ mongomig [--config PATH] [--env NAME] [--json] [--verbose] [--version] COMMAND .
 | Command | |
 |---|---|
 | `init [DIR] [--migrations-dir NAME]` | create `mongomig.yaml` and `migrations/`; refuses to overwrite |
-| `revision -m MSG [--head REV] [--rev-id ID]` | new empty revision on the current head |
+| `revision -m/--message MSG [--head REV] [--rev-id ID]` | new empty revision on the current head |
 | `revision -m MSG --autogenerate [--rename C.OLD:NEW ...]` | generate from model changes; updates the snapshot |
 | `diff [--check] [--rename C.OLD:NEW ...]` | model changes since the last migration; `--check` exits 1 if any |
 | `baseline [-m MSG] [--force]` | adopt an existing database: snapshot the models, empty revision |
@@ -25,7 +25,7 @@ mongomig [--config PATH] [--env NAME] [--json] [--verbose] [--version] COMMAND .
 | `history` | revisions, newest first |
 | `merge [REV ...] [-m MSG]` | join heads (default: all) into one merge revision |
 | `squash [TO] [-m MSG] [--dry-run]` | replace the revisions from the base up to `TO` (default: head) with one; old files go to `versions/_squashed/<rev>/` |
-| `validate [--database] [--no-import] [--strict]` | CI checks; `--database` adds checksums / failed runs |
+| `validate [--database] [--import/--no-import] [--strict]` | CI checks; `--database` adds checksums / failed runs |
 
 ## Database
 
@@ -43,6 +43,8 @@ mongomig [--config PATH] [--env NAME] [--json] [--verbose] [--version] COMMAND .
 | `doctor` | environment diagnostics: versions, config, connection, server, permissions, lock, backups |
 
 Revisions can be given as full ids, unique prefixes (4+ characters) or branch labels.
+`-m` is short for `--message` everywhere it's accepted (`revision`, `merge`, `baseline`,
+`squash`).
 
 ## Exit codes
 
