@@ -19,6 +19,10 @@ Start with `mongomig doctor`. It checks config, connection, permissions, lock an
 | `Transactions need a replica set or a sharded cluster` | `ctx.transaction()` / `transactional=True` on a standalone server | run MongoDB as a replica set (single node is fine), or don't use transactions |
 | `changed since its interrupted run; its checkpoints were discarded` (warning) | a failed migration was edited | expected; it starts over. Make sure re-processing is safe |
 | `Migration ... failed ... after N documents` | a batch failed mid-way | fix the cause, `mongomig resume`; completed batches are skipped |
+| `applied only part of the revisions squashed into …` (exit 4) | a partially migrated database, and the squash archive was deleted | restore `versions/_squashed/<rev>/` from git, or upgrade it with the pre-squash commit first |
+| `… is a squash: it builds the schema … this database already has documents` | the squashed revision is about to run on a database with data but no history | `mongomig stamp <squash>` if the database is already up to date; otherwise use the pre-squash code |
+| `Revision … was squashed into …` | a replaced id was used on the command line | use the squash revision's id |
+| `Can't squash: the history branches at …` | branches inside the range | squash up to the branch point, or `mongomig merge` first |
 | `Cannot downgrade: ... reversible = False` | irreversible revision in the path | restore from backup, or `--force` to un-track |
 | `Decimal needs bson.Decimal128 or a codec` (warning) | `storage="python"` with a type PyMongo can't encode | convert before inserting, use Beanie / `storage="json"`, or `type_overrides` |
 | `database has revisions with no file here` | database migrated by newer code | deploy the newer code; don't downgrade blindly |

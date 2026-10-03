@@ -176,6 +176,44 @@ Results are based on samples (`sampling.size`, `--sample-size`, `--sample-percen
 `--full-scan` for an exact answer on smaller collections. `--strict` fails on any finding.
 `drift` only reads: it needs the `read` role.
 
+## Squashing old revisions
+
+After a few hundred revisions, new environments spend a long time replaying history and
+`versions/` gets crowded. `mongomig squash` replaces the revisions from the first one up to a
+chosen revision with a single one:
+
+```bash
+mongomig squash --dry-run                # preview (default: up to the head)
+mongomig squash 7be204a1c9e0 -m "squash 2026 history"
+```
+
+- **What the squashed revision contains.** Its job is to build a *new, empty* database, so
+  it only needs the schema: the collections, indexes and validators the replaced revisions
+  build up. MongoMig reads (doesn't run) their `ctx.ops` calls and keeps the net result, so
+  an index created and later dropped disappears, and a renamed collection keeps its indexes.
+  Data operations are skipped, because an empty database has nothing to change.
+- **What needs review.** Code squash can't carry over is listed as `TODO(review)` in the new
+  file and in the command output. That covers custom code that may insert documents (seed or
+  reference data), schema changes made outside `ctx.ops`, and `ctx.ops` calls inside loops or
+  conditions or with computed arguments. Copy what's needed into the squashed `upgrade()`.
+- **Existing databases.** A database that already ran all replaced revisions **adopts** the
+  squash on its next `upgrade`: it's recorded as applied and nothing runs. A database that ran
+  only some of them runs the rest from the archive first. Revisions after the squash still name
+  the old ids in `down_revision`; MongoMig maps them to the squash, so no applied file is edited.
+- **The archive.** The replaced files move to `migrations/versions/_squashed/<revision>/`.
+  Commit it. Once **every** environment has upgraded past the squash, you can delete it.
+  Until then, a partially migrated database needs it.
+- **Rules.** A squash always starts at the first revision, and the range must be a straight
+  line with no branches or merges. Squashing again later works too (the new squash replaces
+  the old one).
+- **Data safety.** If the squashed revision is about to *run* (not be adopted) on a database
+  that already holds documents, `upgrade` asks first, because the replaced revisions' data
+  changes are not part of the squash. That happens when a database has data but no migration
+  history. Use `mongomig stamp <squash>` to record it as up to date instead, or run the
+  pre-squash code.
+- **Downgrade** of a squash reverses its schema operations (indexes and validators;
+  collections are kept). It doesn't undo the replaced revisions' data changes.
+
 ## Sharded clusters
 
 `plan` flags operations on sharded collections: broad updates fan out to every shard. Changes

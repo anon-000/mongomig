@@ -54,6 +54,8 @@ $ mongomig upgrade
 - **Catch drift**: `mongomig drift` compares your models with the data actually stored. It
   reports missing fields, unexpected types (`age: string in 5.7% of documents`), unknown fields,
   and missing indexes or validators, with thresholds for CI or scheduled checks.
+- **Keeps history manageable**: `mongomig squash` replaces old revisions with one. Existing
+  databases adopt it automatically, and new ones replay a single revision.
 - **Built for CI**: `mongomig validate`, `--json` output everywhere, documented exit codes.
 
 ## Install
@@ -127,7 +129,8 @@ Examples: [FastAPI + Pydantic](https://github.com/anon-000/mongomig/tree/main/ex
 
 The MVP is complete (config, revisions, upgrade/downgrade, schema inspection, diff,
 autogenerate, plan/dry-run, locking, batching, backups, CI checks), plus drift detection,
-resumable migrations and transactions. Planned next: migration squashing.
+resumable migrations, transactions and squashing. Next: observability (OpenTelemetry /
+Prometheus metrics). Ideas and feedback welcome.
 
 ## Development
 

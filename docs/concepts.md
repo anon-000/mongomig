@@ -79,6 +79,11 @@ tuple of parents for a merge). Order comes from these links, not file names. Sev
 mean diverged history: `revision` and `upgrade` refuse until you pick `--head` or
 `mongomig merge`. Ids can be abbreviated to a unique prefix of 4+ characters.
 
+A **squashed** revision (`replaces = ("…", "…")`, made by `mongomig squash`) stands in for a
+chain of older revisions: links to a replaced id point at the squash, new databases run the
+squash, and databases that ran the old revisions adopt it. See
+[Squashing old revisions](production.md#squashing-old-revisions).
+
 ## Tracking
 
 `__mongomig_migrations` holds one document per revision: status (`applied`, `failed`,

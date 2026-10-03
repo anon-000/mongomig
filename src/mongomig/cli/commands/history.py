@@ -21,7 +21,8 @@ def run(opts: GlobalOptions, out: Output) -> None:
         data.append(
             {
                 "revision": rev,
-                "down_revisions": list(script.down_revisions),
+                "down_revisions": list(graph.parents[rev]),
+                "replaces": list(script.replaces),
                 "message": script.message,
                 "is_head": rev in heads,
                 "is_base": script.is_base,
@@ -38,6 +39,8 @@ def run(opts: GlobalOptions, out: Output) -> None:
         for item in data:
             parents = ", ".join(item["down_revisions"]) or "<base>"
             tags = [t for t, on in (("head", item["is_head"]), ("merge", item["is_merge"])) if on]
+            if item["replaces"]:
+                tags.append(f"squash of {len(item['replaces'])}")
             if not item["reversible"]:
                 tags.append("irreversible")
             tag_text = f" [cyan]({', '.join(tags)})[/cyan]" if tags else ""

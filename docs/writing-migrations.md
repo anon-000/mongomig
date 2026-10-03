@@ -15,6 +15,7 @@ down_revision = "a1f3c9d20b44"   # None for the first; a tuple for merges
 branch_labels = None
 depends_on = None
 reversible = True                # False: downgrade refuses to pass through (unless --force)
+# replaces = ("…", "…")          # only on squashed revisions (see `mongomig squash`)
 snapshot_hash = "sha256:..."     # set by MongoMig
 mongomig_format = 1
 

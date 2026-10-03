@@ -166,6 +166,28 @@ def baseline(
 
 
 @app.command()
+def squash(
+    ctx: typer.Context,
+    to: Annotated[
+        str | None,
+        typer.Argument(help="Last revision to squash (default: the head). Starts at the base."),
+    ] = None,
+    message: Annotated[str, typer.Option("--message", "-m", help="Short description.")] = (
+        "squashed migrations"
+    ),
+    rev_id: Annotated[
+        str | None, typer.Option("--rev-id", help="Use this revision id instead of a random one.")
+    ] = None,
+    dry_run: Annotated[
+        bool, typer.Option("--dry-run", help="Show what would be squashed; change nothing.")
+    ] = False,
+    json_: JsonOpt = False,
+) -> None:
+    """Replace the revisions from the base up to TO with a single revision."""
+    _run(ctx, "squash", json_=json_, to=to, message=message, rev_id=rev_id, dry_run=dry_run)
+
+
+@app.command()
 def heads(ctx: typer.Context, json_: JsonOpt = False) -> None:
     """Show the head revision(s)."""
     _run(ctx, "heads", json_=json_)

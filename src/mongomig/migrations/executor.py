@@ -6,7 +6,7 @@ import importlib.util
 import sys
 import time
 from collections.abc import Callable
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from pathlib import Path
 from types import ModuleType
 from typing import TYPE_CHECKING, Any
@@ -17,6 +17,7 @@ from mongomig.errors import (
     ConfirmationRequiredError,
     IrreversibleMigrationError,
     MigrationExecutionError,
+    RevisionConflictError,
     RevisionNotFoundError,
     ScriptError,
     ValidationError,
@@ -109,6 +110,7 @@ class RunResult:
     direction: Direction
     steps: list[StepResult] = field(default_factory=list)
     aborted: bool = False
+    adopted: list[str] = field(default_factory=list)  # squashes recorded without running
 
     @property
     def revisions(self) -> list[str]:
@@ -240,7 +242,10 @@ class Executor:
             self.tracker.ensure()
             state = self._checked_state()
             plan = plan_upgrade(self.graph, state.applied, target, steps=steps)
-            reasons = confirmation_reasons(plan, self.config.settings.execution.confirm)
+            runs = self._expand_squashes(plan, state)
+            scripts = [script for script, _ in runs]
+            reasons = confirmation_reasons(scripts, self.config.settings.execution.confirm)
+            reasons += self._squash_on_existing_data(scripts)
             if reasons:
                 if confirm is None:
                     raise ConfirmationRequiredError(
@@ -248,14 +253,77 @@ class Executor:
                         suggestion="Review them (`mongomig plan`), then re-run with --yes.",
                         details={"reasons": reasons},
                     )
-                if not confirm(plan, reasons):
+                if not confirm(scripts, reasons):
                     result.aborted = True
                     return result
             meta = self._meta()
-            for script in plan:
+            for rev in state.adoptable:
+                self._adopt(self.graph.scripts[rev], meta, result)
+            for script, adopt_after in runs:
                 self.lock.check()
                 result.steps.append(self._run(script, "upgrade", meta))
+                if adopt_after is not None:
+                    self._adopt(adopt_after, meta, result)
         return result
+
+    def _expand_squashes(
+        self, plan: list[Script], state: CurrentState
+    ) -> list[tuple[Script, Script | None]]:
+        """Replace a partially applied squash by its missing archived revisions.
+
+        Returns (script to run, squash to adopt right after it).
+        """
+        runs: list[tuple[Script, Script | None]] = []
+        for script in plan:
+            missing = state.partial.get(script.revision)
+            if not missing:
+                runs.append((script, None))
+                continue
+            archived = {s.revision: s for s in self.graph.archived.get(script.revision, [])}
+            unavailable = [r for r in missing if r not in archived or archived[r].is_squash]
+            if unavailable:
+                raise RevisionConflictError(
+                    f"The database applied only part of the revisions squashed into "
+                    f"{script.revision}; the missing ones ({', '.join(unavailable)}) aren't in "
+                    f"versions/_squashed/{script.revision}/.",
+                    suggestion="Upgrade this database with the code from before the squash "
+                    "(git checkout the earlier commit, `mongomig upgrade`), then come back.",
+                    details={"squash": script.revision, "missing": missing},
+                )
+            for index, rev in enumerate(missing):
+                runs.append((archived[rev], script if index == len(missing) - 1 else None))
+        return runs
+
+    def _squash_on_existing_data(self, scripts: list[Script]) -> list[str]:
+        """A squash only rebuilds the schema; running it on a database that already holds
+        documents skips the data changes of the revisions it replaced."""
+        from mongomig.schema.inference import user_collections
+
+        squashes = [s for s in scripts if s.is_squash]
+        if not squashes:
+            return []
+        with_data = [
+            name
+            for name in user_collections(self.db)
+            if self.db[name].estimated_document_count() > 0
+        ]
+        if not with_data:
+            return []
+        return [
+            f"{s.revision} is a squash: it builds the schema of the {len(s.replaces)} revisions "
+            f"it replaces but not their data changes, and this database already has documents "
+            f"({', '.join(with_data[:3])}{', ...' if len(with_data) > 3 else ''}); if those "
+            f"revisions never ran here, use `mongomig stamp {s.revision}` or the pre-squash code"
+            for s in squashes
+        ]
+
+    def _adopt(self, squash: Script, meta: dict[str, Any], result: RunResult) -> None:
+        self.tracker.record_adopted(squash, meta=meta)
+        result.adopted.append(squash.revision)
+        self.reporter.log(
+            f"adopted squash {squash.revision}: the {len(squash.replaces)} revisions it "
+            "replaces are applied"
+        )
 
     def downgrade(
         self,
@@ -318,9 +386,10 @@ class Executor:
         state = self._checked_state()
         if direction == "upgrade":
             plan = plan_upgrade(self.graph, state.applied, target or "head", steps=steps)
+            scripts = [script for script, _ in self._expand_squashes(plan, state)]
         else:
-            plan = plan_downgrade(self.graph, state.applied, target, steps=steps)
-        return [self._simulate(script, direction) for script in plan]
+            scripts = plan_downgrade(self.graph, state.applied, target, steps=steps)
+        return [self._simulate(script, direction) for script in scripts]
 
     # --- internals -----------------------------------------------------------------------
 
@@ -402,7 +471,11 @@ class Executor:
     def _run(self, script: Script, direction: Direction, meta: dict[str, Any]) -> StepResult:
         from mongomig.migrations.checkpoints import CheckpointStore
 
-        self.reporter.migration_started(script, direction)
+        # Show the parent as this graph sees it (a replaced id reads as its squash).
+        shown = replace(
+            script, down_revisions=self.graph.parents.get(script.revision, script.down_revisions)
+        )
+        self.reporter.migration_started(shown, direction)
         execution = self.config.settings.execution
         checkpoints = CheckpointStore(
             self.db,
@@ -432,6 +505,7 @@ class Executor:
         if direction == "downgrade" and not script.has_downgrade:
             self.reporter.warn(f"{script.revision} has no downgrade(); only un-tracking it")
             self.tracker.remove(script.revision)
+            self.tracker.remove_many(self.graph.replaced_by(script.revision))
             self.reporter.migration_finished(script, direction, 0)
             return StepResult(script.revision, script.message, direction, 0, skipped_code=True)
 
@@ -455,6 +529,8 @@ class Executor:
             self.tracker.record_applied(script, execution_time_ms=duration_ms, meta=meta)
         else:
             self.tracker.remove(script.revision)
+            # A downgraded squash must not count as applied again through its replaced ids.
+            self.tracker.remove_many(self.graph.replaced_by(script.revision))
         self.reporter.migration_finished(script, direction, duration_ms)
         return StepResult(script.revision, script.message, direction, duration_ms)
 

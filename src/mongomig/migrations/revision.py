@@ -64,6 +64,7 @@ def render_revision(
     downgrade_body: str | None = None,
     notes: str = "",
     reversible: bool = True,
+    replaces: tuple[str, ...] = (),
 ) -> str:
     template = Template(
         files("mongomig").joinpath("templates/revision.py.tmpl").read_text(encoding="utf-8")
@@ -77,6 +78,7 @@ def render_revision(
         message=_docstring_safe(message).strip() or "empty message",
         notes=f"\n{_docstring_safe(notes.rstrip())}\n" if notes.strip() else "",
         reversible=repr(reversible),
+        extra_metadata=f"replaces = {_py_literal(replaces)}\n" if replaces else "",
         upgrade_body=upgrade_body or DEFAULT_UPGRADE_BODY,
         downgrade_body=downgrade_body or DEFAULT_DOWNGRADE_BODY,
         revision=rev_id,
@@ -98,7 +100,8 @@ def _py_literal(value: str | tuple[str, ...] | None) -> str:
     if value is None:
         return "None"
     if isinstance(value, tuple):
-        return "(" + ", ".join(json.dumps(v) for v in value) + ")"
+        inner = ", ".join(json.dumps(v) for v in value)
+        return f"({inner},)" if len(value) == 1 else f"({inner})"
     return json.dumps(value)
 
 
@@ -114,6 +117,7 @@ def write_revision(
     downgrade_body: str | None = None,
     notes: str = "",
     reversible: bool = True,
+    replaces: tuple[str, ...] = (),
 ) -> tuple[str, Path]:
     rev_id = validate_revision_id(rev_id) if rev_id else new_revision_id()
     created = now or datetime.now(UTC)
@@ -130,6 +134,7 @@ def write_revision(
         downgrade_body=downgrade_body,
         notes=notes,
         reversible=reversible,
+        replaces=replaces,
     )
     import ast
 

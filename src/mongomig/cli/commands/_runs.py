@@ -15,6 +15,7 @@ def run_result_data(result: RunResult) -> dict[str, Any]:
     return {
         "direction": result.direction,
         "aborted": result.aborted,
+        "adopted": result.adopted,
         "applied" if result.direction == "upgrade" else "reverted": [
             {
                 "revision": s.revision,
@@ -31,6 +32,8 @@ def render_run_result(out: Output, result: RunResult, nothing_message: str) -> N
     def render(con: Console) -> None:
         if result.aborted:
             con.print("[yellow]Aborted; nothing changed.[/yellow]")
+        elif not result.steps and result.adopted:
+            con.print(f"[green]Adopted squash {', '.join(result.adopted)}; nothing to run.[/green]")
         elif not result.steps:
             con.print(nothing_message)
         else:
