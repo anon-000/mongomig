@@ -98,6 +98,9 @@ mongomig plan                                   # impact against real data
 mongomig upgrade
 ```
 
+For step-by-step walkthroughs of common changes (renames, type changes, unique indexes,
+team merges, deploys and more), see the [Recipes](recipes/index.md).
+
 In CI, `mongomig validate` fails the build if a model change has no migration. On a
 schedule, `mongomig drift --check` tells you when stored data stops matching the models. See
 the [Production guide](production.md) for deploying, recovering from failures and squashing

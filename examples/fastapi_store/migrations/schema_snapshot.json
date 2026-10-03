@@ -1,0 +1,58 @@
+{
+  "collections": {
+    "orders": {
+      "fields": {
+        "_id": {
+          "bson_types": [
+            "objectId"
+          ],
+          "nullable": false,
+          "required": true
+        },
+        "customer": {
+          "bson_types": [
+            "object"
+          ],
+          "default": {
+            "value": {}
+          },
+          "nullable": false,
+          "open": true,
+          "required": true
+        },
+        "total": {
+          "bson_types": [
+            "double"
+          ],
+          "nullable": false,
+          "required": true
+        }
+      },
+      "indexes": [
+        {
+          "keys": [
+            [
+              "customer.last",
+              1
+            ],
+            [
+              "customer.first",
+              1
+            ]
+          ],
+          "name": "customer.last_1_customer.first_1"
+        }
+      ],
+      "model": "app.models.Order",
+      "validator": null
+    }
+  },
+  "mongomig_format": 1,
+  "storage": {
+    "by_alias": true,
+    "exclude_none": false,
+    "exclude_unset": false,
+    "mode": "python",
+    "type_overrides": {}
+  }
+}

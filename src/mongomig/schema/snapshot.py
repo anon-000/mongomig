@@ -89,7 +89,9 @@ def load_snapshot(path: Path) -> Snapshot:
     except json.JSONDecodeError as exc:
         raise ConfigError(
             f"{path.name} is not valid JSON (line {exc.lineno}): {exc.msg}",
-            suggestion="Resolve merge conflicts in the snapshot file, or restore it from git.",
+            suggestion="After a git merge of two branches that both changed models, run "
+            "`mongomig merge`: it rebuilds the snapshot from your models. Otherwise restore the "
+            "file from git.",
         ) from None
     return Snapshot.from_dict(data)
 

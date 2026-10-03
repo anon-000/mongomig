@@ -19,13 +19,16 @@ def run(opts: GlobalOptions, out: Output, *, revisions: list[str], lock_timeout:
     with open_database(config) as db:
         stamped = Executor(config, graph, db).stamp(revisions, lock_timeout=lock_timeout)
 
+    ids = {s.revision for s in stamped}
+    current = [rev for rev in ids if not graph.children[rev] & ids]  # the stamped heads
+
     def render(con: Console) -> None:
         if not stamped:
             con.print("Stamped [bold]<base>[/bold]: no revisions are marked as applied.")
             return
         con.print(
             f"Stamped {len(stamped)} revision(s) as applied (no migration code was run). "
-            f"Current: [bold]{', '.join(revisions)}[/bold]"
+            f"Current: [bold]{', '.join(sorted(current))}[/bold]"
         )
 
-    out.result({"stamped": [s.revision for s in stamped]}, render)
+    out.result({"stamped": [s.revision for s in stamped], "current": sorted(current)}, render)

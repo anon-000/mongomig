@@ -129,10 +129,10 @@ def _compare_fields(
         path = prefix + name
         have = observed.get(name)
         if have is None or have.stats is None:
-            if want.required and parents_seen:
+            if _must_be_present(want) and parents_seen:
                 out.append(_missing(collection, path, 1.0, t))
             continue
-        if want.required and have.stats.presence < 1:
+        if _must_be_present(want) and have.stats.presence < 1:
             out.append(_missing(collection, path, 1 - have.stats.presence, t))
         _check_types(collection, path, want, have, t, out)
         if want.fields is not None and have.fields is not None and not want.open:
@@ -160,6 +160,15 @@ def _compare_fields(
                 hint=FIX_HINTS["unexpected_field"],
             )
         )
+
+
+def _must_be_present(field: FieldSchema) -> bool:
+    """Required, and absence isn't equivalent to the default: a missing field with default
+    ``None`` reads as None (and matches ``{f: null}``), so it isn't drift (as in autogenerate,
+    which doesn't backfill it either)."""
+    return field.required and not (
+        field.has_default and field.default_is_static and field.default is None
+    )
 
 
 def _missing(collection: str, path: str, share: float, t: Thresholds) -> DriftFinding:

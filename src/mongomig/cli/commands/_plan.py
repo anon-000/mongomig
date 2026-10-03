@@ -42,11 +42,11 @@ def render_analyses(con: Console, analyses: list[MigrationAnalysis]) -> None:
         if rows:
             w_coll = max(len(r[0]) for r in rows) + 2
             w_op = max(len(r[1]) for r in rows) + 2
-            w_detail = min(max(len(r[2]) for r in rows) + 2, 48)
+            w_detail = min(max(len(r[2]) for r in rows), 46)
             for (coll, op, detail, impact), recorded in zip(rows, analysis.ops, strict=True):
                 con.print(
                     f"  {escape(coll):<{w_coll}}{escape(op):<{w_op}}"
-                    f"{escape(detail):<{w_detail}}[dim]{escape(impact)}[/dim]"
+                    f"{escape(detail):<{w_detail}}  [dim]{escape(impact)}[/dim]"
                 )
                 for warning in recorded.warnings:
                     con.print(f"  {'':<{w_coll}}[yellow]⚠ {escape(warning)}[/yellow]")
@@ -57,7 +57,7 @@ def render_analyses(con: Console, analyses: list[MigrationAnalysis]) -> None:
         if analysis.error:
             con.print(f"  [red]dry run raised:[/red] {escape(analysis.error)}")
 
-        resumable = {True: "yes (ctx.ops are idempotent)", None: "unknown"}[analysis.resumable]
+        resumable = {True: "yes (checkpointed)", None: "unknown"}[analysis.resumable]
         con.print(
             f"  [dim]reversible: {'yes' if script.reversible else 'no'} · "
             f"deletes data: {'YES' if analysis.destructive else 'no'} · "

@@ -6,6 +6,35 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+## [0.4.2] — 2026-10-04
+
+### Added
+- **Recipes**: 15 step-by-step guides with real output. They cover adding, renaming,
+  retyping and removing fields; unique indexes over duplicates; long custom data migrations;
+  adopting an existing database; two developers changing models; squashing; deploying (GitHub
+  Actions, Docker, Kubernetes Job, Helm and Argo CD hooks); FastAPI; testing migrations;
+  recovering from a failed migration; rolling back; and nightly drift monitoring.
+- Example output for `current`, `plan`, `inspect`, `drift`, `validate`, `doctor`, `stamp` and
+  `backups` in the CLI reference.
+- `mongomig.current_state()` (readiness checks) and `mongomig.load_revision()` (testing a
+  single migration).
+- `examples/fastapi_store`: FastAPI app with a readiness endpoint and migration tests,
+  run in CI.
+
+### Changed
+- `mongomig merge` rebuilds `schema_snapshot.json` from the models (even with git conflict
+  markers in it) and lists the changes it absorbs, so a merged branch's change isn't detected
+  as new again. `diff` points to `merge` when the snapshot has conflict markers.
+- Migration errors show MongoDB's message instead of PyMongo's full error dict, and the hint
+  names `mongomig resume`.
+- `plan`: `ctx.batches` loops count as resumable and aren't double-counted; fixed column
+  spacing for long details.
+- `stamp` prints the resulting revision instead of echoing its argument.
+
+### Fixed
+- `drift` reported required fields defaulting to `None` as missing, contradicting
+  autogenerate (which correctly doesn't backfill them).
+
 ## [0.4.1] — 2026-10-03
 
 ### Added

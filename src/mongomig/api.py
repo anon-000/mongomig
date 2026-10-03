@@ -24,6 +24,9 @@ from mongomig.migrations.executor import RunResult
 from mongomig.migrations.reporting import LoggingReporter, Reporter
 
 if TYPE_CHECKING:
+    from types import ModuleType
+
+    from mongomig.migrations.tracker import CurrentState
     from mongomig.schema.drift import CollectionDrift
 
 DEFAULT_LOCK_TIMEOUT_S = 120.0
@@ -159,3 +162,53 @@ def check_drift(
             sample_size=sample_size or loaded.settings.sampling.size,
             full_scan=full_scan,
         )
+
+
+def current_state(*, config: str | Path | None = None, env: str | None = None) -> CurrentState:
+    """Where the database stands: ``.pending``, ``.failed``, ``.applied_heads``, ...
+
+    Read-only. Handy for readiness checks::
+
+        state = await asyncio.to_thread(mongomig.current_state)
+        ready = not state.pending and not state.failed
+    """
+    from mongomig.config.loader import load_config
+    from mongomig.database.client import open_database
+    from mongomig.migrations.graph import build_graph
+    from mongomig.migrations.tracker import MigrationTracker, compute_state
+
+    loaded = load_config(Path(config) if config else None, environment=env)
+    graph = build_graph(loaded.versions_dir)
+    with open_database(loaded) as db:
+        records = MigrationTracker(db, loaded.settings.migrations.tracking_collection).records()
+    return compute_state(graph, records)
+
+
+def load_revision(ref: str, *, config: str | Path | None = None) -> ModuleType:
+    """Import a revision file to call its ``upgrade(ctx)`` / ``downgrade(ctx)`` in tests.
+
+    ``ref`` is a revision id, a unique prefix, or a fragment of the file name
+    (``"split_customer_names"``)::
+
+        load_revision("split_customer_names").upgrade(MigrationContext(test_db))
+    """
+    from mongomig.config.loader import load_config
+    from mongomig.errors import RevisionNotFoundError
+    from mongomig.migrations.executor import load_migration_module
+    from mongomig.migrations.graph import build_graph
+
+    loaded = load_config(Path(config) if config else None)
+    graph = build_graph(loaded.versions_dir)
+    try:
+        rev = graph.resolve(ref)
+    except RevisionNotFoundError:
+        matches = [r for r, s in graph.scripts.items() if ref in s.path.stem]
+        if len(matches) != 1:
+            raise RevisionNotFoundError(
+                f"No single revision matches {ref!r}"
+                + (f" (candidates: {', '.join(matches)})" if matches else "")
+                + ".",
+                suggestion="Use the revision id, or a unique part of its file name.",
+            ) from None
+        rev = matches[0]
+    return load_migration_module(graph.scripts[rev], loaded.root_dir)

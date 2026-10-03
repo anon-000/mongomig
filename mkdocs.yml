@@ -16,6 +16,7 @@ theme:
     repo: fontawesome/brands/github
   features:
     - navigation.sections
+    - navigation.indexes
     - navigation.top
     - navigation.footer
     - navigation.instant
@@ -44,6 +45,23 @@ nav:
   - Home: index.md
   - Getting started: getting-started.md
   - Coming from Alembic or scripts: comparison.md
+  - Recipes:
+      - recipes/index.md
+      - Add a field: recipes/add-a-field.md
+      - Rename a field: recipes/rename-a-field.md
+      - Change a field's type: recipes/change-a-type.md
+      - Remove a field: recipes/remove-a-field.md
+      - Add a unique index: recipes/unique-index.md
+      - Long custom data migration: recipes/long-data-migration.md
+      - Adopt an existing database: recipes/adopt-existing-database.md
+      - Two developers changed models: recipes/parallel-branches.md
+      - Squash old history: recipes/squash.md
+      - Deploy (CI, Docker, Kubernetes): recipes/deploy.md
+      - FastAPI: recipes/fastapi.md
+      - Test your migrations: recipes/testing.md
+      - A migration failed halfway: recipes/resume-after-failure.md
+      - Roll back a bad release: recipes/rollback.md
+      - Monitor drift nightly: recipes/drift-monitoring.md
   - Guides:
       - Concepts: concepts.md
       - Writing migrations: writing-migrations.md

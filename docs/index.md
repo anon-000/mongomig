@@ -43,6 +43,7 @@ $ mongomig drift --check                            # does stored data still mat
 | | |
 |---|---|
 | New here | [Getting started](getting-started.md) |
+| "How do I…?" (step by step, with real output) | [Recipes](recipes/index.md) |
 | Know Alembic, or using hand-written scripts? | [Coming from Alembic or scripts](comparison.md) |
 | How it thinks | [Concepts](concepts.md) |
 | Writing migrations by hand | [Writing migrations](writing-migrations.md) |

@@ -118,6 +118,8 @@ Full docs: **https://anon-000.github.io/mongomig/**
 
 
 - [Getting started](https://anon-000.github.io/mongomig/getting-started/)
+- [Recipes](https://anon-000.github.io/mongomig/recipes/): step-by-step guides for renames,
+  type changes, unique indexes, team merges, deploys, FastAPI, testing, rollbacks and more
 - [Concepts](https://anon-000.github.io/mongomig/concepts/): snapshots, storage profiles, classifications
 - [Writing migrations](https://anon-000.github.io/mongomig/writing-migrations/): `ctx` and `ctx.ops` reference
 - [Autogenerate](https://anon-000.github.io/mongomig/autogenerate/): what gets generated and how to review it
@@ -127,7 +129,8 @@ Full docs: **https://anon-000.github.io/mongomig/**
   [Troubleshooting](https://anon-000.github.io/mongomig/troubleshooting/)
 
 Examples: [FastAPI + Pydantic](https://github.com/anon-000/mongomig/tree/main/examples/fastapi_pydantic) ·
-[FastAPI + Beanie](https://github.com/anon-000/mongomig/tree/main/examples/fastapi_beanie)
+[FastAPI + Beanie](https://github.com/anon-000/mongomig/tree/main/examples/fastapi_beanie) ·
+[FastAPI with migration tests](https://github.com/anon-000/mongomig/tree/main/examples/fastapi_store)
 
 ## Status
 
