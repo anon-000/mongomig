@@ -6,6 +6,20 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+## [0.4.1] — 2026-10-03
+
+### Added
+- Documentation site at https://anon-000.github.io/mongomig/ (MkDocs Material, built from
+  `docs/` and published to GitHub Pages on every docs change to `main`). It has search,
+  navigation, dark mode and an "edit this page" link.
+- `make docs` (live preview) and `make docs-build`, plus a `docs` extra.
+- CI builds the docs with `--strict`, so broken links or anchors fail the pull request.
+
+### Changed
+- README and PyPI "Documentation" links point to the docs site.
+- Docs: completed the contributor layout map; comparison rows for `alembic check`, squash and
+  drift.
+
 ## [0.4.0] — 2026-10-03
 
 ### Added

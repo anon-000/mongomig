@@ -3,6 +3,7 @@
 [![PyPI](https://img.shields.io/pypi/v/mongomig)](https://pypi.org/project/mongomig/)
 [![Python](https://img.shields.io/pypi/pyversions/mongomig)](https://pypi.org/project/mongomig/)
 [![CI](https://github.com/anon-000/mongomig/actions/workflows/ci.yml/badge.svg)](https://github.com/anon-000/mongomig/actions/workflows/ci.yml)
+[![Docs](https://img.shields.io/badge/docs-anon--000.github.io%2Fmongomig-green)](https://anon-000.github.io/mongomig/)
 [![License: MIT](https://img.shields.io/badge/license-MIT-blue)](https://github.com/anon-000/mongomig/blob/main/LICENSE)
 
 **Alembic-style schema evolution and migrations for MongoDB.**
@@ -113,14 +114,17 @@ USERS  10,000 sampled of ~4,982,133 documents
 
 ## Documentation
 
-- [Getting started](https://github.com/anon-000/mongomig/blob/main/docs/getting-started.md)
-- [Concepts](https://github.com/anon-000/mongomig/blob/main/docs/concepts.md): snapshots, storage profiles, classifications
-- [Writing migrations](https://github.com/anon-000/mongomig/blob/main/docs/writing-migrations.md): `ctx` and `ctx.ops` reference
-- [Autogenerate](https://github.com/anon-000/mongomig/blob/main/docs/autogenerate.md): what gets generated and how to review it
-- [Production guide](https://github.com/anon-000/mongomig/blob/main/docs/production.md): permissions, plan, locking, backups, recovery
-- [Coming from Alembic or hand-written scripts?](https://github.com/anon-000/mongomig/blob/main/docs/comparison.md)
-- [CLI reference](https://github.com/anon-000/mongomig/blob/main/docs/cli.md) · [Python API](https://github.com/anon-000/mongomig/blob/main/docs/python-api.md) ·
-  [Troubleshooting](https://github.com/anon-000/mongomig/blob/main/docs/troubleshooting.md)
+Full docs: **https://anon-000.github.io/mongomig/**
+
+
+- [Getting started](https://anon-000.github.io/mongomig/getting-started/)
+- [Concepts](https://anon-000.github.io/mongomig/concepts/): snapshots, storage profiles, classifications
+- [Writing migrations](https://anon-000.github.io/mongomig/writing-migrations/): `ctx` and `ctx.ops` reference
+- [Autogenerate](https://anon-000.github.io/mongomig/autogenerate/): what gets generated and how to review it
+- [Production guide](https://anon-000.github.io/mongomig/production/): permissions, plan, locking, backups, recovery
+- [Coming from Alembic or hand-written scripts?](https://anon-000.github.io/mongomig/comparison/)
+- [CLI reference](https://anon-000.github.io/mongomig/cli/) · [Python API](https://anon-000.github.io/mongomig/python-api/) ·
+  [Troubleshooting](https://anon-000.github.io/mongomig/troubleshooting/)
 
 Examples: [FastAPI + Pydantic](https://github.com/anon-000/mongomig/tree/main/examples/fastapi_pydantic) ·
 [FastAPI + Beanie](https://github.com/anon-000/mongomig/tree/main/examples/fastapi_beanie)
