@@ -400,8 +400,22 @@ class Executor:
         return run_metadata(self.config.environment, self.config.root_dir)
 
     def _run(self, script: Script, direction: Direction, meta: dict[str, Any]) -> StepResult:
+        from mongomig.migrations.checkpoints import CheckpointStore
+
         self.reporter.migration_started(script, direction)
         execution = self.config.settings.execution
+        checkpoints = CheckpointStore(
+            self.db,
+            self.config.settings.migrations.checkpoint_collection,
+            revision=script.revision,
+            direction=direction,
+            checksum=script.checksum,
+        )
+        if checkpoints.discard_stale():
+            self.reporter.warn(
+                f"{script.revision} changed since its interrupted run; "
+                "its checkpoints were discarded and it starts over"
+            )
         ctx = MigrationContext(
             self.db,
             batch_size=execution.batch_size,
@@ -412,6 +426,7 @@ class Executor:
             direction=direction,
             environment=self.config.environment,
             lock=self.lock,
+            checkpoints=checkpoints,
         )
 
         if direction == "downgrade" and not script.has_downgrade:
@@ -435,6 +450,7 @@ class Executor:
             raise _execution_error(script, direction, ctx, exc, error) from exc
 
         duration_ms = int((time.perf_counter() - start) * 1000)
+        checkpoints.clear()
         if direction == "upgrade":
             self.tracker.record_applied(script, execution_time_ms=duration_ms, meta=meta)
         else:

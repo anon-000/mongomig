@@ -37,6 +37,8 @@ revision**: its checksum is recorded and `upgrade` stops on a mismatch.
 |---|---|
 | `ctx.ops` | high-level operations (below): idempotent, batched, dry-run aware. Prefer these. |
 | `ctx.collection(name)` | a PyMongo `Collection` for custom logic |
+| `ctx.batches(coll, filter, ...)` | resumable loop over documents in `_id` order (see [Custom logic](#custom-logic)) |
+| `ctx.transaction()` | `with ctx.transaction() as session:` atomic writes (replica set required) |
 | `ctx.unsafe_db` | the raw `Database`; dry runs can't simulate it |
 | `ctx.log(msg)` | a line in the progress output |
 | `ctx.dry_run` | `True` during `plan` / `--dry-run` |
@@ -77,27 +79,70 @@ progress with rate and ETA.
 
 ## Custom logic
 
+When `ctx.ops` doesn't fit, loop with `ctx.batches`:
+
 ```python
 def upgrade(ctx):
     users = ctx.collection("users")
-    for user in users.find({"full_name": {"$exists": True}}, {"full_name": 1}):
-        first, _, last = user["full_name"].partition(" ")
-        users.update_one(
-            {"_id": user["_id"]},
-            {"$set": {"first_name": first, "last_name": last or None},
-             "$unset": {"full_name": ""}},
-        )
+    for batch in ctx.batches("users", {"full_name": {"$exists": True}},
+                             projection={"full_name": 1}, batch_size=500):
+        for user in batch:
+            first, _, last = user["full_name"].partition(" ")
+            users.update_one(
+                {"_id": user["_id"]},
+                {"$set": {"first_name": first, "last_name": last or None},
+                 "$unset": {"full_name": ""}},
+            )
 ```
 
-Guidelines:
+`ctx.batches(collection, filter=None, *, projection=None, batch_size=None, transactional=False)`
+walks the matching documents in `_id` order and **checkpoints after every batch**. If the
+migration fails (or the process is killed), `mongomig resume` (or `upgrade`) continues after
+the last completed batch instead of starting over. Each batch is a list of documents with
+`.number` and `.session`.
 
-- **Make it re-runnable.** A failed migration is retried from the start on the next
-  `upgrade`. Filter on "not yet migrated" (here `full_name` exists) instead of "all documents".
-- **Batch big loops** (or use `ctx.ops.backfill` with a pipeline update when the logic fits).
+- **At-least-once (default):** a batch interrupted mid-way is processed again, so per-document
+  work should be repeatable (as above: the filter skips migrated documents).
+- **Exactly-once:** `transactional=True` runs each batch in a transaction together with its
+  checkpoint. Pass `session=batch.session` to every write:
+
+  ```python
+  for batch in ctx.batches("accounts", transactional=True):
+      for acc in batch:
+          ctx.collection("accounts").update_one(
+              {"_id": acc["_id"]}, {"$inc": {"credits": 10}}, session=batch.session
+          )
+  ```
+
+  Keep transactional batches small (a few hundred documents): a transaction should finish
+  well within MongoDB's 60-second limit.
+
+In dry runs (`plan`, `--dry-run`) only the first batch is simulated, so planning stays fast.
+
+### Transactions
+
+```python
+def upgrade(ctx):
+    with ctx.transaction() as session:
+        ctx.collection("accounts").update_one({"_id": a}, {"$inc": {"bal": -10}}, session=session)
+        ctx.collection("accounts").update_one({"_id": b}, {"$inc": {"bal": 10}}, session=session)
+```
+
+The block commits when it ends and aborts if it raises. It needs a replica set or a sharded
+cluster (a single-node replica set is fine); on a standalone server it fails with a clear error.
+Writes without `session=` are not part of the transaction. Migrations are **not** wrapped in a
+transaction automatically: MongoDB transactions are limited in size and duration, which
+doesn't suit bulk data changes.
+
+### Guidelines
+
+- **Make it re-runnable.** Checkpoints skip completed batches, but the batch that was in
+  flight runs again (unless `transactional=True`). Filtering on "not yet migrated" makes any
+  re-run safe.
 - **No side effects outside `ctx`.** `plan`/`--dry-run` run your function for real with writes
   intercepted; an HTTP call or email would happen.
-- **Transactions:** not wrapped automatically. Use `ctx.unsafe_db.client.start_session()`
-  yourself when you need one (replica set required); it won't be simulated by dry runs.
+- **Don't edit a failed migration lightly.** Editing it is allowed (it hasn't been applied),
+  but its checkpoints are then discarded and it starts over.
 
 ## Reversibility
 

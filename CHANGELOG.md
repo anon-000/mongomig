@@ -6,6 +6,28 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+## [0.3.0] — 2026-10-03
+
+### Added
+- **Resumable migrations** (PRD §24). Every batched `ctx.ops` operation checkpoints its
+  progress in `__mongomig_checkpoints`. After a failure or a killed process, a re-run skips
+  completed operations and continues after the last completed batch, even for
+  non-idempotent updates such as `$inc`. Checkpoints are discarded if the migration file
+  changed, are ignored if an operation's filter or update changed, and are deleted on success.
+- `ctx.batches(collection, filter, projection=..., batch_size=..., transactional=False)`:
+  resumable custom loops in `_id` order. They are at-least-once by default; with
+  `transactional=True` each batch commits together with its checkpoint (exactly-once).
+- `ctx.transaction()` (PRD §34): `with ctx.transaction() as session:` commits at the end of
+  the block and aborts if it raises. It needs a replica set and gives a clear error on a
+  standalone server.
+- `mongomig resume`, and `mongomig current` now shows where interrupted migrations will
+  resume.
+- Config: `migrations.checkpoint_collection`.
+
+### Fixed
+- Resuming a batched scan after a dropped cursor no longer skips documents whose `_id` has a
+  different BSON type (e.g. string ids after numeric ones).
+
 ## [0.2.0] — 2026-10-03
 
 ### Added

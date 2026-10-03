@@ -13,6 +13,7 @@ if TYPE_CHECKING:
 
 def run(opts: GlobalOptions, out: Output, *, check: bool = False) -> None:
     from mongomig.database.client import open_database
+    from mongomig.migrations.checkpoints import checkpoint_summary
     from mongomig.migrations.tracker import MigrationTracker, compute_state
 
     config = load_config(opts, out)
@@ -23,8 +24,10 @@ def run(opts: GlobalOptions, out: Output, *, check: bool = False) -> None:
         tracker = MigrationTracker(db, config.settings.migrations.tracking_collection)
         records = tracker.records()
         db_name = db.name
-
-    state = compute_state(graph, records)
+        state = compute_state(graph, records)
+        progress = checkpoint_summary(
+            db, config.settings.migrations.checkpoint_collection, state.failed
+        )
     errors = {r.revision: r.error for r in records if r.error}
 
     def describe(rev: str) -> dict[str, str]:
@@ -40,6 +43,7 @@ def run(opts: GlobalOptions, out: Output, *, check: bool = False) -> None:
         "current": current,
         "pending": pending,
         "failed": state.failed,
+        "checkpoints": progress,
         "modified": state.modified,
         "unknown": state.unknown,
     }
@@ -65,6 +69,13 @@ def run(opts: GlobalOptions, out: Output, *, check: bool = False) -> None:
         for rev in state.failed:
             reason = f": {escape(errors[rev])}" if rev in errors else " (interrupted)"
             con.print(f"[red]Failed:[/red]   {rev}{reason}")
+            for loop in progress.get(rev, []):
+                status = "done" if loop["done"] else f"{loop['processed']:,} documents done"
+                con.print(
+                    f"          resumes from checkpoint: {escape(loop['collection'])} ({status})"
+                )
+        if state.failed:
+            con.print("[dim]Fix the cause, then `mongomig resume` (or `upgrade`).[/dim]")
         for rev in state.modified:
             con.print(f"[red]Modified:[/red] {rev} — file changed after it was applied")
         if state.unknown:

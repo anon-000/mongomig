@@ -34,6 +34,7 @@ class MigrationsConfig(_Section):
     directory: str = DEFAULT_MIGRATIONS_DIR
     tracking_collection: str = "__mongomig_migrations"
     lock_collection: str = "__mongomig_lock"
+    checkpoint_collection: str = "__mongomig_checkpoints"
 
 
 class ExecutionConfig(_Section):

@@ -255,6 +255,20 @@ def upgrade(
 
 
 @app.command()
+def resume(
+    ctx: typer.Context,
+    lock_timeout: LockTimeoutOpt = 0,
+    yes: Annotated[
+        bool,
+        typer.Option("--yes", "-y", help="Don't ask before destructive/irreversible migrations."),
+    ] = False,
+    json_: JsonOpt = False,
+) -> None:
+    """Continue failed or interrupted migrations from their checkpoints."""
+    _run(ctx, "resume", json_=json_, lock_timeout=lock_timeout, yes=yes)
+
+
+@app.command()
 def plan(
     ctx: typer.Context,
     target: Annotated[
