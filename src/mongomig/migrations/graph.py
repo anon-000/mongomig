@@ -3,7 +3,8 @@
 from __future__ import annotations
 
 import heapq
-from collections.abc import Iterable
+from collections.abc import Iterable, Mapping
+from pathlib import Path
 
 from mongomig.errors import (
     AmbiguousRevisionError,
@@ -17,16 +18,34 @@ MIN_PREFIX_LENGTH = 4
 
 
 class RevisionGraph:
-    def __init__(self, scripts: Iterable[Script]) -> None:
+    """The revision DAG.
+
+    Squashed revisions (``replaces = (...)``) stand in for the revisions they replaced: a
+    ``down_revision`` naming a replaced id points at the squash instead. ``archived`` are the
+    replaced files kept by ``mongomig squash`` (per squash revision); they're not part of the
+    graph, but their ``replaces`` let nested squashes resolve.
+    """
+
+    def __init__(
+        self,
+        scripts: Iterable[Script],
+        archived: Mapping[str, list[Script]] | None = None,
+    ) -> None:
         self.scripts: dict[str, Script] = {}
         for script in scripts:
             if script.revision in self.scripts:
                 raise RevisionConflictError(f"Duplicate revision id {script.revision!r}.")
             self.scripts[script.revision] = script
+        self.archived: dict[str, list[Script]] = dict(archived or {})
+        self.squashed_into = self._squash_aliases()
 
+        self.parents: dict[str, tuple[str, ...]] = {
+            rev: tuple(self.canonical(p) for p in s.down_revisions)
+            for rev, s in self.scripts.items()
+        }
         self.children: dict[str, set[str]] = {rev: set() for rev in self.scripts}
         for script in self.scripts.values():
-            for parent in script.down_revisions:
+            for parent in self.parents[script.revision]:
                 if parent not in self.scripts:
                     raise RevisionConflictError(
                         f"Revision {script.revision} ({script.path.name}) points to "
@@ -36,7 +55,7 @@ class RevisionGraph:
                     )
                 self.children[parent].add(script.revision)
             for dep in script.depends_on:
-                if self._lookup_label(dep) is None and dep not in self.scripts:
+                if self._lookup_label(dep) is None and self.canonical(dep) not in self.scripts:
                     raise RevisionConflictError(
                         f"Revision {script.revision} depends_on {dep!r}, which does not exist.",
                         details={"path": str(script.path)},
@@ -73,6 +92,50 @@ class RevisionGraph:
             )
         return heads[0] if heads else None
 
+    def canonical(self, rev: str) -> str:
+        """The id standing for ``rev`` in this graph (a replaced id → its squash)."""
+        seen = set()
+        while rev in self.squashed_into and rev not in seen:
+            seen.add(rev)
+            rev = self.squashed_into[rev]
+        return rev
+
+    def replaced_by(self, rev: str) -> set[str]:
+        """Every id ``rev`` stands for: its ``replaces``, recursively through nested squashes."""
+        archived = {s.revision: s for group in self.archived.values() for s in group}
+        script = self.scripts.get(rev) or archived.get(rev)
+        result: set[str] = set()
+        stack = list(script.replaces) if script else []
+        while stack:
+            current = stack.pop()
+            if current in result:
+                continue
+            result.add(current)
+            nested = archived.get(current)
+            if nested is not None:
+                stack.extend(nested.replaces)
+        return result
+
+    def replaced_ids(self) -> set[str]:
+        """Every revision id that was squashed away (directly or through nested squashes)."""
+        return set(self.squashed_into)
+
+    def _squash_aliases(self) -> dict[str, str]:
+        aliases: dict[str, str] = {}
+        squashes = [s for s in self.scripts.values() if s.is_squash]
+        squashes += [s for group in self.archived.values() for s in group if s.is_squash]
+        for squash in squashes:
+            for replaced in squash.replaces:
+                if replaced in self.scripts:
+                    raise RevisionConflictError(
+                        f"Revision {replaced} was squashed into {squash.revision} but its file "
+                        "is still in versions/.",
+                        suggestion=f"Move it to versions/_squashed/{squash.revision}/ "
+                        "(or delete it).",
+                    )
+                aliases[replaced] = squash.revision
+        return aliases
+
     def ancestors(self, rev: str) -> set[str]:
         """All revisions ``rev`` builds on (excluding itself)."""
         seen: set[str] = set()
@@ -96,6 +159,11 @@ class RevisionGraph:
             return head
         if ref in self.scripts:
             return ref
+        if ref in self.squashed_into:
+            raise RevisionNotFoundError(
+                f"Revision {ref} was squashed into {self.canonical(ref)}.",
+                suggestion=f"Use {self.canonical(ref)} instead.",
+            )
         labelled = self._lookup_label(ref)
         if labelled is not None:
             return labelled
@@ -119,8 +187,8 @@ class RevisionGraph:
 
     def _dependencies(self, rev: str) -> tuple[str, ...]:
         script = self.scripts[rev]
-        deps = [self._lookup_label(d) or d for d in script.depends_on]
-        return (*script.down_revisions, *deps)
+        deps = [self.canonical(self._lookup_label(d) or d) for d in script.depends_on]
+        return (*self.parents[rev], *deps)
 
     def _lookup_label(self, label: str) -> str | None:
         found = [rev for rev, s in self.scripts.items() if label in s.branch_labels]
@@ -159,3 +227,10 @@ class RevisionGraph:
                 suggestion="Fix down_revision/depends_on so revisions don't reference each other.",
             )
         return order
+
+
+def build_graph(versions_dir: Path) -> RevisionGraph:
+    """The revision graph of a project, including squash archives."""
+    from mongomig.migrations.script import load_archived_scripts, load_scripts
+
+    return RevisionGraph(load_scripts(versions_dir), load_archived_scripts(versions_dir))

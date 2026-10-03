@@ -23,6 +23,7 @@ _METADATA_NAMES = frozenset(
         "down_revision",
         "branch_labels",
         "depends_on",
+        "replaces",
         "reversible",
         "snapshot_hash",
         "mongomig_format",
@@ -43,6 +44,11 @@ class Script:
     format_version: int = SUPPORTED_FORMAT
     checksum: str = ""
     has_downgrade: bool = True
+    replaces: tuple[str, ...] = ()  # set on squashed revisions
+
+    @property
+    def is_squash(self) -> bool:
+        return bool(self.replaces)
 
     @property
     def is_base(self) -> bool:
@@ -121,6 +127,7 @@ def load_script(path: Path) -> Script:
         format_version=fmt,
         checksum=file_checksum(source),
         has_downgrade=has_downgrade,
+        replaces=_id_tuple(values.get("replaces"), "replaces", fail),
     )
 
 
@@ -196,3 +203,23 @@ def _message(tree: ast.Module) -> str:
     if not doc:
         return ""
     return doc.strip().splitlines()[0].strip()
+
+
+SQUASH_ARCHIVE = "_squashed"
+
+
+def archive_dir(versions_dir: Path, squash_revision: str) -> Path:
+    """Where ``mongomig squash`` keeps the files a squashed revision replaced."""
+    return versions_dir / SQUASH_ARCHIVE / squash_revision
+
+
+def load_archived_scripts(versions_dir: Path) -> dict[str, list[Script]]:
+    """Replaced revision files per squash revision (``versions/_squashed/<rev>/*.py``)."""
+    root = versions_dir / SQUASH_ARCHIVE
+    if not root.is_dir():
+        return {}
+    return {
+        folder.name: load_scripts(folder)
+        for folder in sorted(root.iterdir())
+        if folder.is_dir() and not folder.name.startswith(".")
+    }

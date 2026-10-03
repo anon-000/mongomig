@@ -34,10 +34,9 @@ def load_config(opts: GlobalOptions, out: Output) -> LoadedConfig:
 
 
 def load_graph(config: LoadedConfig) -> RevisionGraph:
-    from mongomig.migrations.graph import RevisionGraph
-    from mongomig.migrations.script import load_scripts
+    from mongomig.migrations.graph import build_graph
 
-    return RevisionGraph(load_scripts(config.versions_dir))
+    return build_graph(config.versions_dir)
 
 
 def relpath(path: Path, config: LoadedConfig) -> str:

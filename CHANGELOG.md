@@ -6,6 +6,27 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+## [0.4.0] — 2026-10-03
+
+### Added
+- `mongomig squash [TO] [-m MSG] [--dry-run]` (PRD §54) replaces the revisions from the base
+  up to `TO` with one squashed revision (`replaces = (...)`).
+  - The squashed revision builds the schema of the replaced chain (collections, indexes,
+    validators) for new databases. It's derived by reading the `ctx.ops` calls and keeping
+    their net effect; data operations are skipped.
+  - Code that can't be carried over is reported as `TODO(review)`: possible seed-data
+    inserts, schema changes outside `ctx.ops`, `ctx.ops` calls in loops or conditions or with
+    computed arguments, and `ctx.unsafe_db`.
+  - Replaced files move to `versions/_squashed/<rev>/`, and later revisions that still name
+    replaced ids are linked to the squash, so no applied file changes.
+  - Databases that ran all replaced revisions adopt the squash on the next `upgrade`; partially
+    migrated databases run the missing revisions from the archive first; nested squashes work.
+  - `upgrade` asks for confirmation before running a squash on a database that already holds
+    documents.
+- `history` marks squashes and shows parents as the graph resolves them.
+- Docs: "Squashing old revisions" in the production guide; CLI, concepts and troubleshooting
+  updates.
+
 ## [0.3.0] — 2026-10-03
 
 ### Added

@@ -24,6 +24,7 @@ mongomig [--config PATH] [--env NAME] [--json] [--verbose] [--version] COMMAND .
 | `heads` | head revision(s) |
 | `history` | revisions, newest first |
 | `merge [REV ...] [-m MSG]` | join heads (default: all) into one merge revision |
+| `squash [TO] [-m MSG] [--dry-run]` | replace the revisions from the base up to `TO` (default: head) with one; old files go to `versions/_squashed/<rev>/` |
 | `validate [--database] [--no-import] [--strict]` | CI checks; `--database` adds checksums / failed runs |
 
 ## Database

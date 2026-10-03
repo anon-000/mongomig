@@ -45,11 +45,10 @@ def _config(opts: GlobalOptions, checks: CheckList) -> LoadedConfig | None:
 
 
 def _revisions(config: LoadedConfig, checks: CheckList) -> RevisionGraph | None:
-    from mongomig.migrations.graph import RevisionGraph
-    from mongomig.migrations.script import load_scripts
+    from mongomig.migrations.graph import build_graph
 
     try:
-        graph = RevisionGraph(load_scripts(config.versions_dir))
+        graph = build_graph(config.versions_dir)
     except MongoMigError as err:
         checks.add("revision files", "fail", err.message, err.suggestion or "")
         return None

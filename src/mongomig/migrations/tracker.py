@@ -7,7 +7,7 @@ import os
 import socket
 import subprocess
 from collections.abc import Iterable
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, Literal
@@ -66,6 +66,12 @@ class CurrentState:
     unknown: list[str]  # applied in the DB but no revision file (DB ahead of this code)
     failed: list[str]  # failed or interrupted ("running" with no live runner)
     modified: list[str]  # applied, but the file's checksum changed since
+    # Squashes whose replaced revisions are all applied but which aren't recorded yet; the
+    # next upgrade records them ("adopts") without running anything.
+    adoptable: list[str] = field(default_factory=list)
+    # Squashes with only some replaced revisions applied → the missing ones (run from the
+    # squash archive on the next upgrade).
+    partial: dict[str, list[str]] = field(default_factory=dict)
 
 
 def run_metadata(environment: str | None, project_root: Path | None) -> dict[str, Any]:
@@ -145,6 +151,15 @@ class MigrationTracker:
         doc["error"] = error
         self._write(doc)
 
+    def record_adopted(self, script: Script, *, meta: dict[str, Any] | None = None) -> None:
+        """A squash whose replaced revisions all ran: mark it applied without running it."""
+        doc = self._doc(script, "applied", None, meta)
+        doc["adopted"] = True
+        self._write(doc)
+
+    def remove_many(self, revisions: Iterable[str]) -> None:
+        self.collection.delete_many({"_id": {"$in": list(revisions)}})
+
     def remove(self, revision: str) -> None:
         self.collection.delete_one({"_id": revision})
 
@@ -185,13 +200,14 @@ class MigrationTracker:
 
 
 def compute_state(graph: RevisionGraph, records: list[AppliedRecord]) -> CurrentState:
-    applied = frozenset(r.revision for r in records if r.status == "applied")
+    recorded = {r.revision for r in records if r.status == "applied"}
+    applied, adoptable, partial = _with_squashes(graph, recorded)
+    replaced = graph.replaced_ids()
     failed = [r.revision for r in records if r.status in ("failed", "running")]
-    known_applied = {rev for rev in applied if rev in graph}
     order = graph.topological_order()
-    heads = [rev for rev in order if rev in known_applied and not graph.children[rev] & applied]
+    heads = [rev for rev in order if rev in applied and not graph.children[rev] & applied]
     pending = [rev for rev in order if rev not in applied]
-    unknown = sorted(applied - set(graph.scripts))
+    unknown = sorted(recorded - set(graph.scripts) - replaced)
     modified = [
         r.revision
         for r in records
@@ -201,10 +217,44 @@ def compute_state(graph: RevisionGraph, records: list[AppliedRecord]) -> Current
         and r.checksum != graph.scripts[r.revision].checksum
     ]
     return CurrentState(
-        applied=applied,
+        applied=frozenset(applied),
         applied_heads=heads,
         pending=pending,
         unknown=unknown,
         failed=failed,
         modified=modified,
+        adoptable=adoptable,
+        partial=partial,
     )
+
+
+def _with_squashes(
+    graph: RevisionGraph, recorded: set[str]
+) -> tuple[set[str], list[str], dict[str, list[str]]]:
+    """Applied set where a squash counts as applied once everything it replaced is.
+
+    Nested squashes (archived squash revisions) are resolved to a fixed point.
+    """
+    applied = set(recorded)
+    squashes = [s for s in graph.scripts.values() if s.is_squash]
+    squashes += [s for group in graph.archived.values() for s in group if s.is_squash]
+    changed = True
+    while changed:
+        changed = False
+        for squash in squashes:
+            if squash.revision not in applied and all(r in applied for r in squash.replaces):
+                applied.add(squash.revision)
+                changed = True
+    adoptable = [
+        rev
+        for rev in graph.topological_order()
+        if graph.scripts[rev].is_squash and rev in applied and rev not in recorded
+    ]
+    partial: dict[str, list[str]] = {}
+    for rev in graph.topological_order():
+        script = graph.scripts[rev]
+        if script.is_squash and rev not in applied:
+            done = [r for r in script.replaces if r in applied]
+            if done:
+                partial[rev] = [r for r in script.replaces if r not in applied]
+    return applied, adoptable, partial

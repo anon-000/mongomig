@@ -47,11 +47,10 @@ def upgrade(
     from mongomig.config.loader import load_config
     from mongomig.database.client import open_database
     from mongomig.migrations.executor import Executor
-    from mongomig.migrations.graph import RevisionGraph
-    from mongomig.migrations.script import load_scripts
+    from mongomig.migrations.graph import build_graph
 
     loaded = load_config(Path(config) if config else None, environment=env)
-    graph = RevisionGraph(load_scripts(loaded.versions_dir))
+    graph = build_graph(loaded.versions_dir)
     with open_database(loaded) as db:
         executor = Executor(loaded, graph, db, reporter=reporter or LoggingReporter())
         return executor.upgrade(
@@ -76,11 +75,10 @@ def downgrade(
     from mongomig.config.loader import load_config
     from mongomig.database.client import open_database
     from mongomig.migrations.executor import Executor
-    from mongomig.migrations.graph import RevisionGraph
-    from mongomig.migrations.script import load_scripts
+    from mongomig.migrations.graph import build_graph
 
     loaded = load_config(Path(config) if config else None, environment=env)
-    graph = RevisionGraph(load_scripts(loaded.versions_dir))
+    graph = build_graph(loaded.versions_dir)
     with open_database(loaded) as db:
         executor = Executor(loaded, graph, db, reporter=reporter or LoggingReporter())
         return executor.downgrade(
