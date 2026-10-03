@@ -138,3 +138,65 @@ def test_bad_rename_flag(project: Project) -> None:
     result = project.run("diff", "--rename", "first_name:given_name")
     assert result.exit_code == 1
     assert "COLLECTION.OLD_FIELD:NEW_FIELD" in result.output
+
+
+BASE = """
+@collection("users")
+class User(BaseModel):
+    email: str
+"""
+
+
+def two_branches(project: Project) -> tuple[str, str, str]:
+    """Two developers each add a field on their own branch, starting from the same revision.
+
+    Returns (snapshot after branch A, snapshot after branch B, base revision).
+    """
+    project.models(BASE)
+    base = project.json("revision", "--autogenerate", "-m", "initial")["revision"]
+    snap = project.root / "migrations" / "schema_snapshot.json"
+    base_snapshot = snap.read_text()
+
+    project.models(BASE + '    nickname: str = ""\n')  # developer A
+    project.json("revision", "--autogenerate", "-m", "add nickname")
+    snapshot_a = snap.read_text()
+
+    snap.write_text(base_snapshot)  # developer B, branched before A's change
+    project.models(BASE + "    age: int = 0\n")
+    project.json("revision", "--autogenerate", "-m", "add age", "--head", base)
+    snapshot_b = snap.read_text()
+
+    project.models(BASE + '    nickname: str = ""\n    age: int = 0\n')  # git merged the models
+    return snapshot_a, snapshot_b, base
+
+
+def test_merge_rebuilds_a_conflicted_snapshot(project: Project) -> None:
+    snapshot_a, snapshot_b, _ = two_branches(project)
+    snap = project.root / "migrations" / "schema_snapshot.json"
+    snap.write_text(f"<<<<<<< HEAD\n{snapshot_a}=======\n{snapshot_b}>>>>>>> branch-b\n")
+
+    assert len(project.json("heads")["heads"]) == 2
+    result = project.json("merge", "-m", "merge branches")
+    assert result["snapshot_had_conflicts"] is True
+    assert len(project.json("heads")["heads"]) == 1
+    assert project.run("diff", "--check").exit_code == 0  # nothing generated twice
+    assert project.run("validate").exit_code == 0
+
+
+def test_merge_lists_what_it_absorbs(project: Project) -> None:
+    snapshot_a, _, _ = two_branches(project)
+    (project.root / "migrations" / "schema_snapshot.json").write_text(snapshot_a)  # "ours"
+    result = project.run("merge")
+    assert result.exit_code == 0, result.output
+    assert "now includes" in result.output
+    assert "users: + age: int = 0" in result.output  # branch B's change, already migrated
+    assert project.run("diff", "--check").exit_code == 0
+
+
+def test_merge_without_models_leaves_snapshot_alone(project: Project) -> None:
+    env = project.root / "migrations" / "env.py"
+    env.write_text("target_metadata = None\n")
+    first = project.json("revision", "-m", "a")["revision"]
+    project.json("revision", "-m", "b")
+    project.json("revision", "-m", "c", "--head", first)
+    assert project.json("merge")["snapshot_rebuilt"] is False

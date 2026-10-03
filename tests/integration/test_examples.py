@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import os
 import shutil
 import sys
 from collections.abc import Iterator
@@ -17,7 +18,7 @@ from mongomig.metadata import registry
 
 runner = CliRunner()
 EXAMPLES = Path(__file__).resolve().parents[2] / "examples"
-PACKAGES = {"fastapi_pydantic": "userservice", "fastapi_beanie": "catalog"}
+PACKAGES = {"fastapi_pydantic": "userservice", "fastapi_beanie": "catalog", "fastapi_store": "app"}
 
 
 @pytest.fixture(params=sorted(PACKAGES))
@@ -56,3 +57,23 @@ def test_example_migrates_up_and_down(
     assert set(mongo_db.list_collection_names()) - {"__mongomig_migrations", "__mongomig_lock"}
     down = runner.invoke(app, ["downgrade", "base", "--yes"])
     assert down.exit_code == 0, down.output
+
+
+@pytest.mark.integration
+def test_fastapi_store_example_test_suite(mongo_uri: str, mongo_client: Any) -> None:
+    """The FastAPI and testing recipes embed this project's files: its tests must pass."""
+    import subprocess
+    import sys
+
+    root = EXAMPLES / "fastapi_store"
+    result = subprocess.run(
+        [sys.executable, "-m", "pytest", "-q", "-p", "no:cacheprovider", "tests"],
+        cwd=root,
+        env={**os.environ, "TEST_MONGODB_URI": mongo_uri, "MONGODB_URI": mongo_uri},
+        capture_output=True,
+        text=True,
+        timeout=300,
+        check=False,
+    )
+    assert result.returncode == 0, result.stdout + result.stderr
+    assert "3 passed" in result.stdout

@@ -73,19 +73,25 @@ class MigrationAnalysis:
 
     @property
     def resumable(self) -> bool | None:
-        """ctx.ops-only migrations are idempotent, so re-running after a crash is safe."""
+        """Re-running after a crash continues where it stopped: true for ctx.ops and for raw
+        writes inside ctx.batches loops (both checkpointed)."""
         if self.unavailable or self.error:
             return None
-        return all(op.exact for op in self.ops) or None
+        looped = {op.collection for op in self.ops if op.operation == "batches"}
+        return all(op.exact or op.collection in looped for op in self.ops) or None
 
     @property
     def estimated_docs(self) -> int:
+        # A ctx.batches loop already counts the documents it covers; the raw writes recorded
+        # for its first (simulated) batch would count them twice.
+        looped = {op.collection for op in self.ops if op.operation == "batches"}
         return sum(
             op.estimated_docs or 0
             for op in self.ops
             if not op.operation.startswith(
                 ("create_index", "drop_index", "set_validator", "remove_validator")
             )
+            and not (op.collection in looped and op.operation != "batches" and not op.exact)
         )
 
     def to_dict(self) -> dict[str, Any]:
@@ -417,7 +423,7 @@ class Executor:
             except DryRunUnavailable as exc:
                 unavailable = str(exc)
             except Exception as exc:
-                error = redact_text(f"{type(exc).__name__}: {exc}")
+                error = redact_text(error_text(exc))
         assessment = assess(
             recorder.ops, reversible=script.reversible, unavailable=unavailable, error=error
         )
@@ -518,7 +524,7 @@ class Executor:
         try:
             fn(ctx)
         except Exception as exc:
-            error = redact_text(f"{type(exc).__name__}: {exc}")
+            error = redact_text(error_text(exc))
             self.tracker.record_failed(script, error=f"{direction}: {error}", meta=meta)
             self.reporter.migration_failed(script, direction, exc)
             raise _execution_error(script, direction, ctx, exc, error) from exc
@@ -533,6 +539,14 @@ class Executor:
             self.tracker.remove_many(self.graph.replaced_by(script.revision))
         self.reporter.migration_finished(script, direction, duration_ms)
         return StepResult(script.revision, script.message, direction, duration_ms)
+
+
+def error_text(exc: BaseException) -> str:
+    """``Type: message``, using MongoDB's own message instead of PyMongo's full error dict."""
+    details = getattr(exc, "details", None)
+    if isinstance(details, dict) and details.get("errmsg"):
+        return f"{type(exc).__name__}: {details['errmsg']}"
+    return f"{type(exc).__name__}: {exc}"
 
 
 def confirmation_reasons(plan: list[Script], mode: str) -> list[str]:
@@ -608,12 +622,15 @@ def _execution_error(
 
     if isinstance(exc, DuplicateKeyError):
         suggestion = (
-            "Resolve the duplicate values (see error), then re-run; completed batches are kept."
+            "Resolve the duplicate values (see error), then `mongomig resume`; completed "
+            "batches are kept."
         )
     else:
         suggestion = (
-            f"Fix the cause and re-run `mongomig {direction}`. ctx.ops operations are "
-            "idempotent, so already-processed documents are not changed twice."
+            "Fix the cause, then `mongomig resume`: completed batches are skipped and it "
+            "continues where it stopped."
+            if direction == "upgrade"
+            else "Fix the cause and re-run `mongomig downgrade`; completed batches are skipped."
         )
     return MigrationExecutionError(
         f"Migration {script.revision} ({script.message}) failed during {direction}{where}: {error}",

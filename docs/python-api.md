@@ -38,6 +38,27 @@ async def lifespan(app):
 `upgrade_to_head()` is the sync version. Both accept `config`, `env`, `lock_timeout`,
 `reporter`, `yes`.
 
+### State and readiness
+
+```python
+state = mongomig.current_state()        # read-only
+state.pending          # ["7be204a1c9e0", ...] revisions not applied yet
+state.failed           # failed or interrupted revisions
+state.applied_heads    # where the database is
+```
+
+In async code: `await asyncio.to_thread(mongomig.current_state)`. A readiness endpoint built on
+it is in the [FastAPI recipe](recipes/fastapi.md).
+
+### Testing a migration
+
+```python
+migration = mongomig.load_revision("split_customer_names")   # id, prefix or file-name part
+migration.upgrade(MigrationContext(test_db))
+```
+
+See [Test your migrations](recipes/testing.md).
+
 ### Drift
 
 ```python

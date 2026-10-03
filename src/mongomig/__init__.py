@@ -7,7 +7,15 @@ from typing import TYPE_CHECKING, Any
 from mongomig._version import __version__
 
 if TYPE_CHECKING:
-    from mongomig.api import aupgrade_to_head, check_drift, downgrade, upgrade, upgrade_to_head
+    from mongomig.api import (
+        aupgrade_to_head,
+        check_drift,
+        current_state,
+        downgrade,
+        load_revision,
+        upgrade,
+        upgrade_to_head,
+    )
     from mongomig.errors import MongoMigError
     from mongomig.metadata.registry import Index, MongoMetadata, collection
     from mongomig.migrations.context import MigrationContext
@@ -24,7 +32,9 @@ __all__ = [
     "aupgrade_to_head",
     "check_drift",
     "collection",
+    "current_state",
     "downgrade",
+    "load_revision",
     "upgrade",
     "upgrade_to_head",
 ]
@@ -43,6 +53,8 @@ _LAZY: dict[str, str] = {
     "upgrade_to_head": "mongomig.api",
     "aupgrade_to_head": "mongomig.api",
     "check_drift": "mongomig.api",
+    "current_state": "mongomig.api",
+    "load_revision": "mongomig.api",
 }
 
 

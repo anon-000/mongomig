@@ -111,3 +111,32 @@ def test_recorder_merges_loops_of_raw_writes() -> None:
 def test_update_summary() -> None:
     assert update_summary({"$set": {"a": 1, "b": 2}, "$unset": {"c": ""}}) == "$set a, b; $unset c"
     assert update_summary([{"$set": {}}]) == "pipeline update"
+
+
+def test_error_text_uses_mongodb_message() -> None:
+    from pymongo.errors import WriteError
+
+    from mongomig.migrations.executor import error_text
+
+    exc = WriteError("long text, full error: {...}", 241, {"errmsg": "Failed to parse '12,50'"})
+    assert error_text(exc) == "WriteError: Failed to parse '12,50'"
+    assert error_text(KeyError("x")) == "KeyError: 'x'"
+
+
+def test_batches_loops_are_counted_once_and_resumable(tmp_path: Path) -> None:
+    from mongomig.migrations.executor import MigrationAnalysis
+    from mongomig.safety.impact import Assessment
+
+    script = load_script(write_migration(tmp_path, "a1"))
+    loop = [
+        op(operation="batches", estimated_docs=200_000, exact=False),
+        op(operation="update_one", estimated_docs=500, exact=False, calls=500),
+    ]
+    analysis = MigrationAnalysis(script, "upgrade", loop, Assessment())
+    assert analysis.estimated_docs == 200_000
+    assert analysis.resumable is True
+
+    raw_only = MigrationAnalysis(
+        script, "upgrade", [op(operation="update_many", exact=False)], Assessment()
+    )
+    assert raw_only.resumable is None

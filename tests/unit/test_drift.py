@@ -187,3 +187,13 @@ def test_validator_comparison() -> None:
         coll(rules, "moderate"), coll({"$jsonSchema": {"required": []}}, "moderate")
     )[0]
     assert "rules differ" in other.summary
+
+
+def test_fields_defaulting_to_none_are_not_missing() -> None:
+    model = declared(
+        plan=f("string", nullable=True, has_default=True, default=None, default_is_static=True),
+        status=f("string", has_default=True, default="active", default_is_static=True),
+    )
+    result = findings(model, [{"x": 1}])
+    assert ("missing_field", "plan") not in result  # reads as None: autogenerate skips it too
+    assert ("missing_field", "status") in result  # queries on status would miss these
